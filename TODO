@@ -1,0 +1,10 @@
+make DNS resolution nonblocking
+write tests
+write fuzzy/stress test
+ASAN
+free dynamic input buffer if unused
+Add support for multiple upstream repos http://hub:9129/repo/$upstream/
+Cleanup on exit, make valgrind happy
+use yaml for configuration?
+add incoming request timeout
+save pacoloco stats to a file

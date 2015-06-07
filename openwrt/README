@@ -1,0 +1,8 @@
+To build it copy current dir to
+
+$OPENWRT/package/pacoloco/
+
+then
+
+cd $OPENWRT
+make package/pacoloco/compile USE_SOURCE_DIR=$PACOLOCO_DIR V=s 

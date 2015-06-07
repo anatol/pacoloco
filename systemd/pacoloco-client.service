@@ -1,0 +1,12 @@
+[Unit]
+Description=Registers local machine repository at pacoloco hub
+Wants=network-online.target
+After=network-online.target pacoloco-hub.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/curl --silent 'http://router:9129/rpc/ping'
+
+[Install]
+WantedBy=multi-user.target
