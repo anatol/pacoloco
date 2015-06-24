@@ -467,7 +467,7 @@ static void handle_peer_response(struct peer *peer, int status, struct phr_heade
       }
     } else {
       struct peer *dest_peer = file_check->orig_peer;
-      // if it is a package file request then existance all we need
+      // if it is a package file request then existence all we need
       incoming_req_redirect_to(incoming_req, peer);
       statistics.served_locally++;
       peer_calculate_stats(dest_peer, peer, headers, headers_num);
@@ -482,7 +482,7 @@ static void handle_peer_response(struct peer *peer, int status, struct phr_heade
       return;
     }
   } else {
-    log_info("[%d] unexpected reponse code: %d", peer->fd, status);
+    log_info("[%d] unexpected response code: %d", peer->fd, status);
   }
 
   if (list_empty(&file_check->reqs_head)) {
