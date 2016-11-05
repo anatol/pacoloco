@@ -542,7 +542,7 @@ static void peer_event_handler(uint32_t events, void *data) {
 
   if (events & EPOLLIN) {
     while (true) {
-      // TODO: we can make input stack allocated, and only in case of partial parsing allocate on head
+      // TODO: we can make input stack allocated, and only in case of partial parsing allocate on heap
       struct buffer *buf = peer->buffer;
       size_t buf_len_prev = buf->inuse;
       size_t buf_start = 0;
@@ -851,7 +851,7 @@ static void client_event_handler(uint32_t events, void *data) {
 
   if (events & EPOLLIN) {
     while (true) {
-      // TODO: we can make input stack allocated, and only in case of partial parsing allocate on head
+      // TODO: we can make input stack allocated, and only in case of partial parsing allocate on heap
       struct buffer *buf = client->input;
       size_t buf_len_prev = buf->inuse;
       size_t buf_start = 0;
