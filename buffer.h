@@ -27,6 +27,7 @@ static void buf_shift(struct buffer *buf, size_t processed) {
     memmove(buf->data, rest, rest_size);
     buf->inuse = rest_size;
   }
+  assert(BUFFER_SIZE > buf->inuse);
 }
 
 static struct buffer *buf_clone(const struct buffer *src) {
@@ -51,6 +52,9 @@ restart:
 
   if (n > 0)
     buf->inuse += n;
+
+  assert(buf->inuse > 0);
+  assert(buf->inuse <= BUFFER_SIZE);
 
   return n;
 }
@@ -85,6 +89,7 @@ static int buf_printf(struct buffer *buf, const char *fmt, ...) {
   if (n > 0)
     buf->inuse += n;
 
+  assert(BUFFER_SIZE > buf->inuse);
   return n;
 }
 
@@ -92,6 +97,8 @@ static void buf_append(struct buffer *dest, const struct buffer *src) {
   assert(dest->inuse + src->inuse <= BUFFER_SIZE);
   memcpy(dest->data + dest->inuse, src->data, src->inuse);
   dest->inuse += src->inuse;
+  assert(BUFFER_SIZE > src->inuse);
+  assert(BUFFER_SIZE > dest->inuse);
 }
 
 
