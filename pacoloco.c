@@ -405,10 +405,10 @@ static void peer_calculate_stats(struct peer *dest, struct peer *src, struct phr
 }
 
 static void handle_peer_response(struct peer *peer, int status, struct phr_header *headers, size_t headers_num) {
-  debug("[%d] got reply %d", peer->fd, status);
-
   assert(!list_empty(&peer->reqs_head));
+
   struct peer_req *req = list_first_entry(&peer->reqs_head, struct peer_req, peer_req);
+  debug("[%d] got reply %d for client %d", peer->fd, status, req->incoming_req->client->fd);
   list_del(&req->peer_req);
   struct incoming_req *incoming_req = req->incoming_req;
   if (incoming_req)
@@ -541,11 +541,11 @@ static void peer_event_handler(uint32_t events, void *data) {
   }
 
   if (events & EPOLLIN) {
+    size_t bytes_left = 0, bytes_left_last = 0;
     while (true) {
       // TODO: we can make input stack allocated, and only in case of partial parsing allocate on heap
       struct buffer *buf = peer->buffer;
-      size_t buf_len_prev = buf->inuse;
-      size_t buf_start = 0;
+      char *buf_start = &buf->data[0];
 
       int n = buf_read(fd, buf);
       if (n < 0) {
@@ -555,18 +555,19 @@ static void peer_event_handler(uint32_t events, void *data) {
       } else if (n == 0) {
         break;
       }
-      assert(buf->inuse > 0);
       bool is_full = buf_full(buf);
+      bytes_left_last = bytes_left;
+      bytes_left = buf->inuse;
 
-      while (buf_start < buf->inuse) {
+      while (bytes_left > 0) {
         // incoming data might contain multiple HTTP requests (aka HTTP pipeline)
         int minor_version, status;
         const char *msg;
         struct phr_header headers[HTTP_HEADERS_MAX];
         size_t msg_len, headers_num = HTTP_HEADERS_MAX;
 
-        int parsed = phr_parse_response(buf->data, buf->inuse, &minor_version, &status, &msg, &msg_len, headers,
-                                        &headers_num, buf_len_prev);
+        int parsed = phr_parse_response(buf_start, bytes_left, &minor_version, &status, &msg, &msg_len, headers,
+                                        &headers_num, bytes_left_last);
 
         if (parsed == -2) {
           if (is_full) {
@@ -583,16 +584,15 @@ static void peer_event_handler(uint32_t events, void *data) {
           peer_close(peer);
           return;
         }
-        assert(parsed > 0 && parsed <= (int)buf->inuse);
+        assert(parsed > 0 && (size_t)parsed <= bytes_left);
 
         handle_peer_response(peer, status, headers, headers_num);
+        bytes_left -= parsed;
         buf_start += parsed;
       }
 
-      if (buf_start) {
-        // buf_start - how much we processed already, discard that data
-        buf_shift(buf, buf_start);
-      }
+      buf_shift(buf, buf->inuse - bytes_left);
+
       if (!is_full)
         break;
       // if buffer was full after previous read() then it might be more date in socket, let's read it
@@ -850,11 +850,12 @@ static void client_event_handler(uint32_t events, void *data) {
   }
 
   if (events & EPOLLIN) {
+    size_t bytes_left = 0, bytes_left_last = 0;
+
     while (true) {
       // TODO: we can make input stack allocated, and only in case of partial parsing allocate on heap
       struct buffer *buf = client->input;
-      size_t buf_len_prev = buf->inuse;
-      size_t buf_start = 0;
+      char *buf_start = &buf->data[0];
 
       int n = buf_read(fd, buf);
       if (n < 0) {
@@ -864,17 +865,18 @@ static void client_event_handler(uint32_t events, void *data) {
       } else if (n == 0) {
         break;
       }
-      assert(buf->inuse > 0);
       bool is_full = buf_full(buf);
+      bytes_left_last = bytes_left;
+      bytes_left = buf->inuse;
 
-      while (buf_start < buf->inuse) {
+      while (bytes_left > 0) {
         // incoming data might contain multiple HTTP requests (aka HTTP pipeline)
         const char *method, *path;
         int parsed, minor_version;
         struct phr_header headers[HTTP_HEADERS_MAX];
         size_t method_len, path_len, headers_num = HTTP_HEADERS_MAX;
-        parsed = phr_parse_request(buf->data, buf->inuse, &method, &method_len, &path, &path_len, &minor_version,
-                                   headers, &headers_num, buf_len_prev);
+        parsed = phr_parse_request(buf_start, bytes_left, &method, &method_len, &path, &path_len, &minor_version,
+                                   headers, &headers_num, bytes_left_last);
 
         if (parsed == -2) {
           if (is_full) {
@@ -891,16 +893,15 @@ static void client_event_handler(uint32_t events, void *data) {
           incoming_client_free(client);
           return;
         }
-        assert(parsed > 0 && parsed <= (int)buf->inuse);
+        assert(parsed > 0 && (size_t)parsed <= bytes_left);
 
         handle_incoming_req(client, path, path_len, headers, headers_num);
+        bytes_left -= parsed;
         buf_start += parsed;
       }
 
-      if (buf_start) {
-        // buf_start - how much we processed already, discard that data
-        buf_shift(buf, buf_start);
-      }
+      buf_shift(buf, buf->inuse - bytes_left);
+
       if (!is_full)
         break;
       // if buffer was full after previous read() then it might be more date in socket, let's read it
