@@ -1,4 +1,4 @@
-CFLAGS += -W -Wall -std=gnu11 -g -DDEBUG
+CFLAGS += -W -Wall -std=gnu11
 #LDFLAGS +=
 #CFLAGS += -O1 -g -fsanitize=address -fno-omit-frame-pointer
 

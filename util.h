@@ -2,10 +2,10 @@
 #define __UTIL_H_
 
 
-#ifdef NDEBUG
-#define debug(M, ...)
-#else
+#ifdef DEBUG
 #define debug(M, ...) fprintf(stderr, "D(%s:%d) " M "\n", __FILE__, __LINE__, ##__VA_ARGS__)
+#else
+#define debug(M, ...)
 #endif
 
 #define clean_errno() (errno == 0 ? "None" : strerror(errno))
