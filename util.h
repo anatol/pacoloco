@@ -1,7 +1,6 @@
 #ifndef __UTIL_H_
 #define __UTIL_H_
 
-
 #ifdef DEBUG
 #define debug(M, ...) fprintf(stderr, "D(%s:%d) " M "\n", __FILE__, __LINE__, ##__VA_ARGS__)
 #else
@@ -34,12 +33,9 @@
     _a < _b ? _a : _b;                                                                                                 \
   })
 
-
-
 #define str_equal(s1, s2) (strcmp(s1, s2) == 0)                    // s2 is static string
 #define str_starts_with(s1, s2) (strncmp(s1, s2, strlen(s2)) == 0) // s2 is static string
-#define str_ends_with(s1, s1_len, s2)                                                                                          \
+#define str_ends_with(s1, s1_len, s2)                                                                                  \
   (s1_len >= strlen(s2) && strncmp(s1 + s1_len - strlen(s2), s2, strlen(s2)) == 0) // s2 is static string
-
 
 #endif /* __UTIL_H_ */

@@ -19,14 +19,13 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "buffer.h"
+#include "compat.h"
 #include "ini.h"
 #include "list.h"
-#include "compat.h"
-#include "buffer.h"
-#include "util.h"
 #include "picohttpparser.h"
 #include "uriparser.h"
-
+#include "util.h"
 
 // TODO: Add ipv6 support
 

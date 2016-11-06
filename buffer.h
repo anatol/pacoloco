@@ -1,7 +1,6 @@
 #ifndef __BUFFER_H_
 #define __BUFFER_H_
 
-
 #define BUFFER_SIZE 4096
 
 struct buffer {
@@ -9,8 +8,7 @@ struct buffer {
   size_t inuse;
 };
 
-#define BUF_INIT()                                                                                                     \
-  { .inuse = 0 };
+#define BUF_INIT() {.inuse = 0};
 static void buf_init(struct buffer *buf) { buf->inuse = 0; }
 static void buf_reset(struct buffer *buf) { buf->inuse = 0; }
 
@@ -100,6 +98,5 @@ static void buf_append(struct buffer *dest, const struct buffer *src) {
   assert(BUFFER_SIZE > src->inuse);
   assert(BUFFER_SIZE > dest->inuse);
 }
-
 
 #endif /* __BUFFER_H_ */
