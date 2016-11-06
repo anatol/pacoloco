@@ -22,13 +22,13 @@ def rand(arr)
 end
 
 
-hydra = Typhoeus::Hydra.new(max_concurrency: 3)
+hydra = Typhoeus::Hydra.new(max_concurrency: 20)
 
 #hubs.each { |h|
   #Typhoeus::Request.get "http://#{h}:#{port}/rpc/register?pkg_path=repo/pkg&pkg_port=80&db_path=repo/db&db_port=80"
 #}
 
-for i in 1..3000 do
+for i in 1..60000 do
   hub = rand(hubs)
   file = rand(files)
 
