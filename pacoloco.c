@@ -544,7 +544,7 @@ static void peer_event_handler(uint32_t events, void *data) {
     while (true) {
       // TODO: we can make input stack allocated, and only in case of partial parsing allocate on heap
       struct buffer *buf = peer->buffer;
-      char *buf_start = &buf->data[0];
+      char *buf_start = buf->data;
 
       int n = buf_read(fd, buf);
       if (n < 0) {
@@ -854,7 +854,7 @@ static void client_event_handler(uint32_t events, void *data) {
     while (true) {
       // TODO: we can make input stack allocated, and only in case of partial parsing allocate on heap
       struct buffer *buf = client->input;
-      char *buf_start = &buf->data[0];
+      char *buf_start = buf->data;
 
       int n = buf_read(fd, buf);
       if (n < 0) {
