@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPLv2
+
 #ifndef __URL_PARSER_H_
 #define __URL_PARSER_H_
 

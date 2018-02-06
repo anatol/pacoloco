@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPLv2
+
 CFLAGS += -W -Wall -std=gnu11
 #LDFLAGS +=
 #CFLAGS += -O1 -g -fsanitize=address -fno-omit-frame-pointer

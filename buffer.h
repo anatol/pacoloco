@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPLv2
+
 #ifndef __BUFFER_H_
 #define __BUFFER_H_
 

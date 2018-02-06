@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPLv2
+
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=pacoloco

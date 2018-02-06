@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPLv2
+
 #ifndef __COMPAT_H_
 #define __COMPAT_H_
 

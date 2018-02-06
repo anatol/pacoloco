@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPLv2
+
 #define _BSD_SOURCE
 #define _XOPEN_SOURCE
 #define _DEFAULT_SOURCE
