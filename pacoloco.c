@@ -36,14 +36,18 @@
 #define HTTP_HEADERS_MAX 30
 #define MAX_URL_LEN 4096
 
+// If a peer at local network does not reply in 1 second then it considered dead
+#define PEER_TIMEOUT 1
+
 #define DEFAULT_UPSTREAM "http://mirrors.kernel.org/archlinux"
 #define DEFAULT_PORT 9129
 /* define the config struct type */
 struct config {
     char *upstream;
     int port;
+    int peer_timeout;
 };
-static struct config config = {.upstream = DEFAULT_UPSTREAM, .port = DEFAULT_PORT};
+static struct config config = {.upstream = DEFAULT_UPSTREAM, .port = DEFAULT_PORT, .peer_timeout = PEER_TIMEOUT};
 
 static int epollfd;
 
@@ -621,6 +625,18 @@ static void address_cpy(struct sockaddr_storage *dest, struct sockaddr *src) {
     memcpy(dest, src, size);
 }
 
+static void set_peer_socket_timeout(int sockfd) {
+    struct timeval timeout;
+    timeout.tv_sec = config.peer_timeout;
+    timeout.tv_usec = 0;
+
+    if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)) < 0)
+        log_err("setsockopt failed");
+
+    if (setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, (char *)&timeout, sizeof(timeout)) < 0)
+        log_err("setsockopt failed");
+}
+
 static void peer_connect(struct peer *peer) {
     struct addrinfo hints, *result;
     memset(&hints, 0, sizeof(struct addrinfo));
@@ -643,6 +659,8 @@ static void peer_connect(struct peer *peer) {
             perror("client socket");
             continue;
         }
+
+        set_peer_socket_timeout(peerfd);
 
         int flags = fcntl(peerfd, F_GETFL, 0);
         fcntl(peerfd, F_SETFL, flags | O_NONBLOCK);
@@ -1045,6 +1063,8 @@ static int parse_handler(void *arg, const char *section, const char *name, const
             cfg->upstream = strdup(value);
         } else if (strcmp(name, "port") == 0) {
             cfg->port = atoi(value);
+        } else if (strcmp(name, "peer_timeout") == 0) {
+            cfg->peer_timeout = atoi(value);
         }
     } else if (strcmp(section, "peer") == 0) {
         // host:port = db_path,pkg_path
