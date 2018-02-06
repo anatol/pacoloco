@@ -17,6 +17,7 @@
 #include <string.h>
 #include <sys/epoll.h>
 #include <sys/socket.h>
+#include <sys/timerfd.h>
 #include <sys/uio.h>
 #include <time.h>
 #include <unistd.h>
@@ -38,6 +39,8 @@
 
 // If a peer at local network does not reply in 1 second then it considered dead
 #define PEER_TIMEOUT 1
+// reset peer back to active after 2 minutes of inactivity
+#define REACTIVATE_PEER_TIME 120
 
 #define DEFAULT_UPSTREAM "http://mirrors.kernel.org/archlinux"
 #define DEFAULT_PORT 9129
@@ -46,10 +49,15 @@ struct config {
     char *upstream;
     int port;
     int peer_timeout;
+    int reactivate_peer_time;
 };
-static struct config config = {.upstream = DEFAULT_UPSTREAM, .port = DEFAULT_PORT, .peer_timeout = PEER_TIMEOUT};
+static struct config config = {.upstream = DEFAULT_UPSTREAM,
+                               .port = DEFAULT_PORT,
+                               .peer_timeout = PEER_TIMEOUT,
+                               .reactivate_peer_time = REACTIVATE_PEER_TIME};
 
 static int epollfd;
+static int reactivate_peer_timerfd;
 
 typedef void(handler_t)(uint32_t events, void *data);
 
@@ -355,11 +363,65 @@ static void peer_close(struct peer *peer) {
     }
 }
 
+struct reactivate_peer_timer {
+    handler_t *on_event;
+    bool active;
+};
+
+static handler_t reactivate_peer;
+
+struct reactivate_peer_timer reactivate_peer_timer = {
+    .on_event = reactivate_peer,
+    .active = false,
+};
+
+struct epoll_event reactivate_peer_ev = {
+    .events = EPOLLIN | EPOLLONESHOT,
+    .data.ptr = &reactivate_peer_timer.on_event,
+};
+
 static void peer_mark_inactive(struct peer *peer) {
     if (peer->fd) {
         peer_close(peer);
     }
     peer->state = FAILED;
+
+    debug("deactivating peer %d", peer->fd);
+
+    if (!reactivate_peer_timer.active) {
+        debug("setting reactivate peer timer to %d seconds from now", config.reactivate_peer_time);
+
+        // Setup reactivation timer
+        struct itimerspec ts;
+        ts.it_interval.tv_sec = 0;
+        ts.it_interval.tv_nsec = 0;
+        ts.it_value.tv_sec = config.reactivate_peer_time;
+        ts.it_value.tv_nsec = 0;
+
+        if (timerfd_settime(reactivate_peer_timerfd, 0, &ts, NULL) < 0) {
+            perror("timerfd_settime");
+            exit(EXIT_FAILURE);
+        }
+
+        if (epoll_ctl(epollfd, EPOLL_CTL_MOD, reactivate_peer_timerfd, &reactivate_peer_ev) < 0) {
+            perror("epoll_ctl");
+            exit(EXIT_FAILURE);
+        }
+
+        reactivate_peer_timer.active = true;
+    }
+}
+
+static void reactivate_peer(uint32_t events, void *data) {
+    struct peer *peer;
+
+    debug("reactivating peers");
+    list_for_each(peer, &peers_head, list) {
+        if (peer->state == FAILED)
+            peer->state = NEW;
+    }
+
+    reactivate_peer_timer.active = false;
 }
 
 #define HTTP_DATE_FMT "%a, %d %b %Y %H:%M:%S GMT"
@@ -1065,6 +1127,8 @@ static int parse_handler(void *arg, const char *section, const char *name, const
             cfg->port = atoi(value);
         } else if (strcmp(name, "peer_timeout") == 0) {
             cfg->peer_timeout = atoi(value);
+        } else if (strcmp(name, "reactivate_peer_time") == 0) {
+            cfg->reactivate_peer_time = atoi(value);
         }
     } else if (strcmp(section, "peer") == 0) {
         // host:port = db_path,pkg_path
@@ -1145,6 +1209,16 @@ int main(void) {
 
     log_info("[%d] listening port %d", sockfd, config.port);
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, sockfd, &ev) < 0) {
+        perror("epoll_ctl");
+        exit(EXIT_FAILURE);
+    }
+
+    reactivate_peer_timerfd = timerfd_create(CLOCK_MONOTONIC, 0);
+    if (reactivate_peer_timerfd == -1) {
+        perror("timerfd_create");
+        exit(EXIT_FAILURE);
+    }
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, reactivate_peer_timerfd, &reactivate_peer_ev) < 0) {
         perror("epoll_ctl");
         exit(EXIT_FAILURE);
     }
