@@ -10,6 +10,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
+#include <signal.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -1162,6 +1163,9 @@ static void parse_config(const char *config_file) {
 #define PACOLOCO_CONFIG_FILE "/etc/pacoloco.ini"
 #endif
 
+volatile sig_atomic_t done = 0;
+void sigterm_handler(int signum) { done = 1; }
+
 int main(void) {
     parse_config(PACOLOCO_CONFIG_FILE);
 
@@ -1223,12 +1227,21 @@ int main(void) {
         exit(EXIT_FAILURE);
     }
 
-    while (true) {
+    struct sigaction action;
+    memset(&action, 0, sizeof(struct sigaction));
+    action.sa_handler = sigterm_handler;
+    sigaction(SIGTERM, &action, NULL);
+
+    while (!done) {
         struct epoll_event epoll_events[EPOLL_MAX_EVENTS];
         int num = epoll_wait(epollfd, epoll_events, EPOLL_MAX_EVENTS, -1);
         if (num == -1) {
-            perror("epoll_wait");
-            exit(EXIT_FAILURE);
+            if (errno == EINTR) {
+                continue;
+            } else {
+                perror("epoll_wait");
+                exit(EXIT_FAILURE);
+            }
         }
 
         for (int i = 0; i < num; i++) {
@@ -1239,6 +1252,7 @@ int main(void) {
             (*(handler_t **)data)(events, data);
         }
     }
+    debug("exiting");
 
     return 0;
 }
