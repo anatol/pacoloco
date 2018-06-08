@@ -710,8 +710,8 @@ static void peer_connect(struct peer *peer) {
     snprintf(port, 100, "%d", peer->port);
     int res = getaddrinfo(peer->host, port, &hints, &result);
     if (res != 0 || !result) {
-        peer_mark_inactive(peer);
         log_err("getaddrinfo for host %s: %s", peer->host, gai_strerror(res));
+        peer_mark_inactive(peer);
         return;
     }
 
