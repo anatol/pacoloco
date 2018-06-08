@@ -387,7 +387,7 @@ static void peer_mark_inactive(struct peer *peer) {
     }
     peer->state = FAILED;
 
-    debug("deactivating peer %d", peer->fd);
+    debug("deactivating peer '%s'", peer->host);
 
     if (!reactivate_peer_timer.active) {
         debug("setting reactivate peer timer to %d seconds from now", config.reactivate_peer_time);
