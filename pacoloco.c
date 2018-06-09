@@ -382,16 +382,16 @@ struct epoll_event reactivate_peer_ev = {
 };
 
 static void peer_mark_inactive(struct peer *peer) {
-    debug("[%d] deactivating peer '%s'", peer->fd, peer->host);
-    if (!reactivate_peer_timer.active)
-        debug("[%d] setting reactivate peer timer to %d seconds from now", peer->fd, config.reactivate_peer_time);
+    int peerfd = peer->fd;
+    debug("[%d] deactivating peer '%s'", peerfd, peer->host);
 
-    if (peer->fd) {
+    if (peerfd) {
         peer_close(peer);
     }
     peer->state = FAILED;
 
     if (!reactivate_peer_timer.active) {
+        debug("[%d] setting reactivate peer timer to %d seconds from now", peerfd, config.reactivate_peer_time);
         // Setup reactivation timer
         struct itimerspec ts;
         ts.it_interval.tv_sec = 0;
