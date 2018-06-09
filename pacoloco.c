@@ -382,16 +382,16 @@ struct epoll_event reactivate_peer_ev = {
 };
 
 static void peer_mark_inactive(struct peer *peer) {
+    debug("[%d] deactivating peer '%s'", peer->fd, peer->host);
+    if (!reactivate_peer_timer.active)
+        debug("[%d] setting reactivate peer timer to %d seconds from now", peer->fd, config.reactivate_peer_time);
+
     if (peer->fd) {
         peer_close(peer);
     }
     peer->state = FAILED;
 
-    debug("deactivating peer '%s'", peer->host);
-
     if (!reactivate_peer_timer.active) {
-        debug("setting reactivate peer timer to %d seconds from now", config.reactivate_peer_time);
-
         // Setup reactivation timer
         struct itimerspec ts;
         ts.it_interval.tv_sec = 0;
@@ -605,7 +605,7 @@ static void peer_event_handler(uint32_t events, void *data) {
 
     if (events & EPOLLHUP || events & EPOLLERR || events & EPOLLRDHUP) {
         debug("[%d] got HUP for peer connection", fd);
-        peer_close(peer);
+        peer_mark_inactive(peer);
         return;
     }
 
@@ -731,6 +731,7 @@ static void peer_connect(struct peer *peer) {
         // we already know address here (even if later connect fails)
         address_cpy(&peer->address, rp->ai_addr);
 
+        debug("[%d] trying to connect to host '%s'", peerfd, peer->host);
         int ret = connect(peerfd, (struct sockaddr *)rp->ai_addr, rp->ai_addrlen);
         if (ret == 0) {
             peer->state = ACTIVE;
