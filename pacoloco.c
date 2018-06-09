@@ -477,14 +477,15 @@ static void handle_peer_response(struct peer *peer, int status, struct phr_heade
     assert(!list_empty(&peer->reqs_head));
 
     struct peer_req *req = list_first_entry(&peer->reqs_head, struct peer_req, peer_req);
-    debug("[%d] got reply %d for client %d", peer->fd, status, req->incoming_req->client->fd);
     list_del(&req->peer_req);
     struct incoming_req *incoming_req = req->incoming_req;
     if (incoming_req)
         list_del(&req->file_check_req);
     free(req);
 
-    if (!incoming_req) {
+    if (incoming_req) {
+        debug("[%d] got reply %d for client %d", peer->fd, status, incoming_req->client->fd);
+    } else {
         debug("[%d] no incoming request, it must be handled/cancelled already", peer->fd);
         return;
     }
