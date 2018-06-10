@@ -571,7 +571,7 @@ static void peer_event_handler(uint32_t events, void *data) {
         assert(peer->state == CONNECTING);
 
         if (events & EPOLLERR) {
-            log_err("[%d] connection error", fd);
+            debug("[%d] connection error", fd);
             peer_mark_inactive(peer);
             return;
         }
