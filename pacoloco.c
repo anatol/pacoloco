@@ -604,8 +604,13 @@ static void peer_event_handler(uint32_t events, void *data) {
         debug("[%d] opened a connection to peer %s", fd, peer->host);
     }
 
-    if (events & EPOLLHUP || events & EPOLLERR || events & EPOLLRDHUP) {
-        debug("[%d] got HUP for peer connection", fd);
+    if (events & EPOLLHUP || events & EPOLLRDHUP) {
+        debug("[%d] got HUP from peer connection", fd);
+        peer_close(peer);
+        return;
+    }
+    if (events & EPOLLERR) {
+        debug("[%d] got ERR from peer connection", fd);
         peer_mark_inactive(peer);
         return;
     }
