@@ -98,6 +98,9 @@ struct peer {
 
     handler_t *on_event; // epoll handler embedded directly to this structure
 
+    int connect_timer_fd;
+    handler_t *on_connect_timeout;
+
     // data buffer for the peer
     // in CONNECTING state this buffer contains output data
     // in ACTIVE state input data that was partially read from the peer
@@ -341,6 +344,10 @@ static void peer_close(struct peer *peer) {
     peer->fd = 0;
     peer->state = NEW;
     buf_reset(peer->buffer);
+    if (peer->connect_timer_fd != 1) {
+        close(peer->connect_timer_fd);
+        peer->connect_timer_fd = -1;
+    }
 
     // cancel all requests sent to the peer
     struct peer_req *req, *t;
@@ -385,9 +392,9 @@ static void peer_mark_inactive(struct peer *peer) {
     int peerfd = peer->fd;
     debug("[%d] deactivating peer '%s'", peerfd, peer->host);
 
-    if (peerfd) {
+    if (peerfd)
         peer_close(peer);
-    }
+
     peer->state = FAILED;
 
     if (!reactivate_peer_timer.active) {
@@ -563,6 +570,19 @@ static void handle_peer_response(struct peer *peer, int status, struct phr_heade
     }
 }
 
+static void peer_connect_timeout(uint32_t events, void *data) {
+    struct peer *peer = container_of(data, struct peer, on_connect_timeout);
+
+    assert(peer->connect_timer_fd != -1);
+    close(peer->connect_timer_fd);
+    peer->connect_timer_fd = -1;
+
+    if (peer->state == CONNECTING) {
+        debug("[%d] connection timeout", peer->fd);
+        peer_mark_inactive(peer);
+    }
+}
+
 static void peer_event_handler(uint32_t events, void *data) {
     struct peer *peer = container_of(data, struct peer, on_event);
     int fd = peer->fd;
@@ -601,6 +621,15 @@ static void peer_event_handler(uint32_t events, void *data) {
         if (peer->buffer->inuse)
             buf_write(peer->fd, peer->buffer);
         // now peer->buffer becomes input buffer
+
+        // remove connect timeout timer
+        if (epoll_ctl(epollfd, EPOLL_CTL_DEL, peer->connect_timer_fd, NULL) < 0) {
+            perror("epoll_ctl");
+            exit(EXIT_FAILURE);
+        }
+        close(peer->connect_timer_fd);
+        peer->connect_timer_fd = -1;
+
         debug("[%d] opened a connection to peer %s", fd, peer->host);
     }
 
@@ -723,41 +752,66 @@ static void peer_connect(struct peer *peer) {
 
     struct addrinfo *rp;
     for (rp = result; rp != NULL; rp = rp->ai_next) {
-        int peerfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-        if (peerfd < 0) {
+        peer->fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        if (peer->fd < 0) {
             perror("client socket");
             continue;
         }
+        set_peer_socket_timeout(peer->fd);
 
-        set_peer_socket_timeout(peerfd);
-
-        int flags = fcntl(peerfd, F_GETFL, 0);
-        fcntl(peerfd, F_SETFL, flags | O_NONBLOCK);
+        int flags = fcntl(peer->fd, F_GETFL, 0);
+        fcntl(peer->fd, F_SETFL, flags | O_NONBLOCK);
 
         // we already know address here (even if later connect fails)
         address_cpy(&peer->address, rp->ai_addr);
 
-        debug("[%d] trying to connect to host '%s'", peerfd, peer->host);
-        int ret = connect(peerfd, (struct sockaddr *)rp->ai_addr, rp->ai_addrlen);
+        debug("[%d] trying to connect to host '%s'", peer->fd, peer->host);
+        int ret = connect(peer->fd, (struct sockaddr *)rp->ai_addr, rp->ai_addrlen);
         if (ret == 0) {
             peer->state = ACTIVE;
         } else if (ret < 0 && errno == EINPROGRESS) {
             peer->state = CONNECTING;
+
+            // Setup connect timeout timer
+            peer->connect_timer_fd = timerfd_create(CLOCK_MONOTONIC, 0);
+            if (peer->connect_timer_fd == -1) {
+                perror("timerfd_create");
+                exit(EXIT_FAILURE);
+            }
+
+            struct itimerspec ts = {
+                .it_interval.tv_sec = 0,
+                .it_interval.tv_nsec = 0,
+                .it_value.tv_sec = config.peer_timeout,
+                .it_value.tv_nsec = 0,
+            };
+
+            if (timerfd_settime(peer->connect_timer_fd, 0, &ts, NULL) < 0) {
+                perror("timerfd_settime");
+                exit(EXIT_FAILURE);
+            }
+
+            struct epoll_event to;
+            to.events = EPOLLIN | EPOLLONESHOT;
+            to.data.ptr = &peer->on_connect_timeout;
+            if (epoll_ctl(epollfd, EPOLL_CTL_ADD, peer->connect_timer_fd, &to) < 0) {
+                perror("epoll_ctl");
+                exit(EXIT_FAILURE);
+            }
         } else {
             log_err("cannot connect to %s:%d - %s", peer->host, peer->port, strerror(errno));
-            close(peerfd);
+            close(peer->fd);
             continue;
         }
 
         struct epoll_event ev;
         ev.events = EPOLLOUT | EPOLLIN | EPOLLRDHUP;
         ev.data.ptr = &peer->on_event;
-        if (epoll_ctl(epollfd, EPOLL_CTL_ADD, peerfd, &ev) < 0) {
+        if (epoll_ctl(epollfd, EPOLL_CTL_ADD, peer->fd, &ev) < 0) {
             perror("epoll_ctl");
             exit(EXIT_FAILURE);
         }
 
-        peer->fd = peerfd; // caching the peer connection
         break;
     }
 
@@ -1118,6 +1172,8 @@ static void parse_repo_url(const char *uri, struct peer *upstream) {
 static void peer_init(struct peer *peer) {
     memset(peer, 0, sizeof(struct peer));
     peer->on_event = peer_event_handler;
+    peer->on_connect_timeout = peer_connect_timeout;
+    peer->connect_timer_fd = -1;
     peer->buffer = malloc(sizeof(struct buffer));
     buf_init(peer->buffer);
     INIT_LIST_HEAD(&peer->reqs_head);
