@@ -891,7 +891,7 @@ static void handle_repo_request(struct client *client, const char *uri, size_t u
     } else if (str_ends_with(path, path_len, ".files") || str_ends_with(path, path_len, ".files.sig")) {
         skip_check = true;
         // .files are not stored in local repos. Just skip them and send requests straight to upstream
-    } else if (str_ends_with(path, path_len, ".pkg.tar.xz")) {
+    } else if (str_ends_with(path, path_len, ".pkg.tar.xz") || str_ends_with(path, path_len, ".pkg.tar.zst")) {
         db = false;
     } else {
         statistics.unknown_repo_requests++;
