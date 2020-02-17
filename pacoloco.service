@@ -1,0 +1,10 @@
+[Unit]
+Description=Pacoloco caching proxy server
+
+[Service]
+User=pacoloco
+ExecStart=/usr/bin/pacoloco
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target
