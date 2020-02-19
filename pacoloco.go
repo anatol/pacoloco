@@ -85,7 +85,7 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 
 	filePath := filepath.Join(cachePath, fileName)
 	stat, err := os.Stat(filePath)
-	noFile := os.IsNotExist(err)
+	noFile := err != nil
 	if noFile || forceCheckAtServer(fileName) {
 		ifLater, _ := http.ParseTime(req.Header.Get("If-Modified-Since"))
 		if noFile {
