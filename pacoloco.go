@@ -95,7 +95,6 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 			ifLater = stat.ModTime()
 		}
 
-		var err error
 		if repo.Url != "" {
 			err = downloadFile(repo.Url+path+"/"+fileName, filePath, ifLater)
 		} else {
