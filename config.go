@@ -10,7 +10,7 @@ const DefaultPort = 9129
 const DefaultCacheDir = "/var/cache/pacoloco"
 
 type Repo struct {
-	Url string `yaml:"url"`
+	Url  string   `yaml:"url"`
 	Urls []string `yaml:"urls"`
 }
 
