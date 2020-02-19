@@ -32,14 +32,16 @@ cache_dir: /var/cache/pacoloco
 port: 9129
 repos:
   archlinux:
-    url: http://mirror.lty.me/archlinux
+    urls:
+      - http://mirror.lty.me/archlinux
+      - http://mirrors.kernel.org/archlinux
   quarry:
     url: http://pkgbuild.com/~anatolik/quarry/x86_64
   sublime:
     url: https://download.sublimetext.com/arch/stable/x86_64
 ```
 
-`cache_dir` is a cache directory. `port` the server port. `repos` is a list of repositories to mirror. Each repo needs `name` and `url` of its Arch mirror.
+`cache_dir` is a cache directory. `port` the server port. `repos` is a list of repositories to mirror. Each repo needs `name` and url of its Arch mirrors. Note that url can be specified either with `url` or `urls` properties, one and only one can be used for each repo configuration.
 
 With the example configured above `http://YOURSERVER:9129/repo/archlinux` looks exactly like an Arch pacman mirror.
 For example a request to `http://YOURSERVER:9129/repo/archlinux/core/os/x86_64/openssh-8.2p1-3-x86_64.pkg.tar.zst` will be served with file content from `http://mirror.lty.me/archlinux/core/os/x86_64/openssh-8.2p1-3-x86_64.pkg.tar.zst`

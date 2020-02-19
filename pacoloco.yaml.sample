@@ -1,8 +1,10 @@
-#cache_dir: /var/cache/pacoloco
-#port: 9129
+cache_dir: /var/cache/pacoloco
+port: 9129
 repos:
   archlinux:
-    url: http://mirror.lty.me/archlinux
+    urls:
+      - http://mirror.lty.me/archlinux
+      - http://mirrors.kernel.org/archlinux
   quarry:
     url: http://pkgbuild.com/~anatolik/quarry/x86_64
   sublime:

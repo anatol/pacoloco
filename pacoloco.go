@@ -43,7 +43,7 @@ func pacolocoHandler(w http.ResponseWriter, req *http.Request) {
 	err := handleRequest(w, req)
 	if err != nil {
 		log.Println(err)
-		http.Error(w, err.Error(), 404)
+		w.WriteHeader(http.StatusNotFound)
 	}
 }
 
@@ -95,7 +95,17 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 			ifLater = stat.ModTime()
 		}
 
-		err := downloadFile(repo.Url+path+"/"+fileName, filePath, ifLater)
+		var err error
+		if repo.Url != "" {
+			err = downloadFile(repo.Url+path+"/"+fileName, filePath, ifLater)
+		} else {
+			for _, url := range repo.Urls {
+				err = downloadFile(url+path+"/"+fileName, filePath, ifLater)
+				if err == nil {
+					break
+				}
+			}
+		}
 		if err != nil {
 			return err
 		}
