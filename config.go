@@ -1,9 +1,11 @@
 package main
 
 import (
+	"golang.org/x/sys/unix"
 	"gopkg.in/yaml.v3"
 	"io/ioutil"
 	"log"
+	"os/user"
 )
 
 const DefaultPort = 9129
@@ -41,6 +43,14 @@ func readConfig(filename string) *Config {
 		if repo.Url == "" && len(repo.Urls) == 0 {
 			log.Fatalf("please specify url for repo '%v'", name)
 		}
+	}
+
+	if unix.Access(result.CacheDir, unix.R_OK|unix.W_OK) != nil {
+		u, err := user.Current()
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Fatalf("directory %v does not exist or isn't writable for user %v", result.CacheDir, u.Username)
 	}
 
 	return result
