@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -59,6 +60,13 @@ func forceCheckAtServer(fileName string) bool {
 	return false
 }
 
+// A mutex map for files currently being downloaded
+// It is used to prevent downloading the same file with concurrent requests
+var (
+	downloadingFiles      = make(map[string]*sync.Mutex)
+	downloadingFilesMutex sync.Mutex
+)
+
 func handleRequest(w http.ResponseWriter, req *http.Request) error {
 	urlPath := req.URL.Path
 	matches := pathRegex.FindStringSubmatch(urlPath)
@@ -86,9 +94,32 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 	filePath := filepath.Join(cachePath, fileName)
 	stat, err := os.Stat(filePath)
 	noFile := err != nil
+	requestFromServer := noFile || forceCheckAtServer(fileName)
+
+	if requestFromServer {
+		mutexKey := repoName + ":" + fileName
+		downloadingFilesMutex.Lock()
+		_, ok = downloadingFiles[mutexKey]
+		if !ok {
+			downloadingFiles[mutexKey] = &sync.Mutex{}
+		}
+		fileMutex := downloadingFiles[mutexKey]
+		downloadingFilesMutex.Unlock()
+		fileMutex.Lock()
+		defer func() {
+			downloadingFilesMutex.Lock()
+			delete(downloadingFiles, mutexKey)
+			downloadingFilesMutex.Unlock()
+		}()
+
+		// refresh the data in case if the file has been download while we were waiting for the mutex
+		stat, err = os.Stat(filePath)
+		noFile = err != nil
+		requestFromServer = noFile || forceCheckAtServer(fileName)
+	}
 
 	var served bool
-	if noFile || forceCheckAtServer(fileName) {
+	if requestFromServer {
 		ifLater, _ := http.ParseTime(req.Header.Get("If-Modified-Since"))
 		if noFile {
 			// ignore If-Modified-Since and download file if it does not exist in the cache
@@ -118,8 +149,6 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 // file and sends to `clientWriter` at the same time.
 // The function returns whether the function sent the data to client and error if one occurred
 func downloadFile(url string, filePath string, ifModifiedSince time.Time, clientWriter http.ResponseWriter) (err error, served bool) {
-	// TODO: add a mutex that prevents multiple downloads for the same file
-
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return
