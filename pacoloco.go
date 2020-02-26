@@ -86,6 +86,8 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 	filePath := filepath.Join(cachePath, fileName)
 	stat, err := os.Stat(filePath)
 	noFile := err != nil
+
+	var served bool
 	if noFile || forceCheckAtServer(fileName) {
 		ifLater, _ := http.ParseTime(req.Header.Get("If-Modified-Since"))
 		if noFile {
@@ -96,40 +98,40 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 		}
 
 		if repo.Url != "" {
-			err = downloadFile(repo.Url+path+"/"+fileName, filePath, ifLater)
+			err, served = downloadFile(repo.Url+path+"/"+fileName, filePath, ifLater, w)
 		} else {
 			for _, url := range repo.Urls {
-				err = downloadFile(url+path+"/"+fileName, filePath, ifLater)
+				err, served = downloadFile(url+path+"/"+fileName, filePath, ifLater, w)
 				if err == nil {
 					break
 				}
 			}
 		}
-		if err != nil {
-			return err
-		}
 	}
-
-	return sendFile(w, req, fileName, filePath)
+	if !served {
+		err = sendCachedFile(w, req, fileName, filePath)
+	}
+	return err
 }
 
-// downloadFile downloads file from `url` and saves it with given `localFileName`
-func downloadFile(url string, filePath string, ifModifiedSince time.Time) error {
+// downloadFile downloads file from `url`, saves it to the given `localFileName`
+// file and sends to `clientWriter` at the same time.
+// The function returns whether the function sent the data to client and error if one occurred
+func downloadFile(url string, filePath string, ifModifiedSince time.Time, clientWriter http.ResponseWriter) (err error, served bool) {
 	// TODO: add a mutex that prevents multiple downloads for the same file
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return err
+		return
 	}
 
 	if !ifModifiedSince.IsZero() {
 		req.Header.Set("If-Modified-Since", ifModifiedSince.UTC().Format(http.TimeFormat))
 	}
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return err
+		return
 	}
 	defer resp.Body.Close()
 
@@ -138,39 +140,49 @@ func downloadFile(url string, filePath string, ifModifiedSince time.Time) error 
 		break
 	case http.StatusNotModified:
 		// either pacoloco or client has the latest version, no need to redownload it
-		return nil
+		return
 	default:
-		// for most dbs signatures are optional, silent if the signature is not found
-		// silent := resp.StatusCode == http.StatusNotFound && strings.HasSuffix(url, ".db.sig")
-		return fmt.Errorf("unable to download url %s, status code is %d", url, resp.StatusCode)
+		// for most dbs signatures are optional, be quiet if the signature is not found
+		// quiet := resp.StatusCode == http.StatusNotFound && strings.HasSuffix(url, ".db.sig")
+		err = fmt.Errorf("unable to download url %s, status code is %d", url, resp.StatusCode)
+		return
 	}
 
-	out, err := os.Create(filePath)
+	file, err := os.Create(filePath)
 	if err != nil {
-		return err
+		return
 	}
 
 	log.Printf("downloading %v", url)
-	_, err = io.Copy(out, resp.Body) // TODO: if multiple clients requested this file then make resp.Body streaming to all the clients
-	_ = out.Close()                  // Close the file early to make sure the file modification time is set
+	clientWriter.Header().Set("Content-Length", resp.Header.Get("Content-Length"))
+	clientWriter.Header().Set("Content-Type", "application/octet-stream")
+	clientWriter.Header().Set("Last-Modified", resp.Header.Get("Last-Modified"))
+
+	w := io.MultiWriter(file, clientWriter)
+	_, err = io.Copy(w, resp.Body)
+	_ = file.Close() // Close the file early to make sure the file modification time is set
 	if err != nil {
-		return err
+		// remove the cached file if download was not successful
+		_ = os.Remove(filePath)
+		return
 	}
+	served = true
 
 	if lastModified := resp.Header.Get("Last-Modified"); lastModified != "" {
-		lastModified, err := http.ParseTime(lastModified)
+		lastModified, parseErr := http.ParseTime(lastModified)
+		err = parseErr
 		if err == nil {
 			err = os.Chtimes(filePath, lastModified, lastModified)
 			if err != nil {
-				return err
+				return
 			}
 		}
 	}
 
-	return nil
+	return
 }
 
-func sendFile(w http.ResponseWriter, req *http.Request, fileName string, filePath string) error {
+func sendCachedFile(w http.ResponseWriter, req *http.Request, fileName string, filePath string) error {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return err
