@@ -157,6 +157,10 @@ func downloadFile(url string, filePath string, ifModifiedSince time.Time, client
 	if !ifModifiedSince.IsZero() {
 		req.Header.Set("If-Modified-Since", ifModifiedSince.UTC().Format(http.TimeFormat))
 	}
+	// golang requests compression for all requests except HEAD
+	// some servers return compressed data without Content-Length header info
+	// disable compression as it useless for package data
+	req.Header.Add("Accept-Encoding", "identity")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
