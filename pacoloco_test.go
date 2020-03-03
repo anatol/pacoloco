@@ -2,8 +2,20 @@ package main
 
 import (
 	"github.com/google/go-cmp/cmp"
+	"io/ioutil"
+	"log"
+	"os"
 	"testing"
 )
+
+func TestMain(m *testing.M) {
+	if os.Getenv("TEST_VERBOSE") != "1" {
+		// disable log output
+		log.SetOutput(ioutil.Discard)
+	}
+
+	os.Exit(m.Run())
+}
 
 func TestPathMatcher(t *testing.T) {
 	pathCheck := func(url string, repoName string, path string, fileName string) {

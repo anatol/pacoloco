@@ -1,0 +1,344 @@
+package main
+
+import (
+	"io/ioutil"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path"
+	"testing"
+	"time"
+)
+
+var mirrorURL string
+var pacolocoURL string
+var testPacolocoDir string
+var mirrorDir string
+
+func TestPacolocoIntegration(t *testing.T) {
+	var err error
+	mirrorDir, err = ioutil.TempDir(os.TempDir(), "*-pacoloco-mirror")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(mirrorDir)
+
+	// For easier setup we are going to serve several Arch mirror trees by one
+	// instance of http.FileServer
+	mirror := httptest.NewServer(http.FileServer(http.Dir(mirrorDir)))
+	defer mirror.Close()
+	mirrorURL = mirror.URL
+
+	// Now setup pacoloco cache dir
+	testPacolocoDir, err = ioutil.TempDir(os.TempDir(), "*-pacoloco-repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(testPacolocoDir)
+
+	config = &Config{
+		CacheDir:        testPacolocoDir,
+		Port:            -1,
+		PurgeFilesAfter: -1,
+		Repos:           make(map[string]Repo),
+	}
+
+	pacoloco := httptest.NewServer(http.HandlerFunc(pacolocoHandler))
+	defer pacoloco.Close()
+	pacolocoURL = pacoloco.URL
+
+	t.Run("testInvalidURL", testInvalidURL)
+	t.Run("testRequestNonExistingDb", testRequestNonExistingDb)
+	t.Run("testRequestExistingRepo", testRequestExistingRepo)
+	t.Run("testRequestExistingRepoWithDb", testRequestExistingRepoWithDb)
+	t.Run("testRequestPackageFile", testRequestPackageFile)
+	t.Run("testFailover", testFailover)
+}
+
+func testInvalidURL(t *testing.T) {
+	req := httptest.NewRequest("GET", "http://example.com/foo", nil)
+	w := httptest.NewRecorder()
+	pacolocoHandler(w, req)
+	resp := w.Result()
+	if resp.StatusCode != 404 {
+		t.Error("404 response expected")
+	}
+}
+
+func testRequestNonExistingDb(t *testing.T) {
+	// Requesting non-existing repo
+	req := httptest.NewRequest("GET", pacolocoURL+"/repo/test/test.db", nil)
+	w := httptest.NewRecorder()
+	pacolocoHandler(w, req)
+	resp := w.Result()
+	if resp.StatusCode != 404 {
+		t.Error("404 response expected")
+	}
+
+	// check that no repo cached
+	_, err := os.Stat(path.Join(testPacolocoDir, "pkgs", "test"))
+	if !os.IsNotExist(err) {
+		t.Error("test repo should not cached")
+	}
+}
+
+func testRequestExistingRepo(t *testing.T) {
+	// Requesting existing repo
+	config.Repos["repo1"] = Repo{}
+	defer delete(config.Repos, "repo1")
+
+	req := httptest.NewRequest("GET", pacolocoURL+"/repo/repo1/test.db", nil)
+	w := httptest.NewRecorder()
+	pacolocoHandler(w, req)
+	resp := w.Result()
+	if resp.StatusCode != 404 {
+		t.Error("404 response expected")
+	}
+
+	// check that db is not cached
+	_, err := os.Stat(path.Join(testPacolocoDir, "pkgs", "repo1", "test.db"))
+	if !os.IsNotExist(err) {
+		t.Error("repo1/test.db should be cached")
+	}
+}
+
+func testRequestExistingRepoWithDb(t *testing.T) {
+	// Requesting existing repo
+	config.Repos["repo2"] = Repo{
+		Url: mirrorURL + "/mirror2",
+	}
+	defer delete(config.Repos, "repo2")
+
+	if err := os.Mkdir(path.Join(mirrorDir, "mirror2"), os.ModePerm); err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(path.Join(mirrorDir, "mirror2"))
+
+	dbAtMirror := path.Join(mirrorDir, "mirror2", "test.db")
+	dbFileContent := "pacoloco/mirror2.db"
+	if err := ioutil.WriteFile(dbAtMirror, []byte(dbFileContent), os.ModePerm); err != nil {
+		t.Fatal(err)
+	}
+	// Make the mirror file old enough to distinguish it from the subsequent modifications
+	dbModTime := time.Now().Add(-time.Hour)
+	os.Chtimes(dbAtMirror, dbModTime, dbModTime)
+
+	req := httptest.NewRequest("GET", pacolocoURL+"/repo/repo2/test.db", nil)
+	w := httptest.NewRecorder()
+	pacolocoHandler(w, req)
+	resp := w.Result()
+	if resp.StatusCode != 200 {
+		t.Errorf("200 response expected, got %v", resp.StatusCode)
+	}
+	content, err := ioutil.ReadAll(w.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != dbFileContent {
+		t.Errorf("Pacoloco cached incorrect db content: %v", string(content))
+	}
+	if resp.ContentLength != int64(len(dbFileContent)) {
+		t.Errorf("Pacoloco returns incorrect lenght %v", resp.ContentLength)
+	}
+	expectedModTime := dbModTime.UTC().Format(http.TimeFormat)
+	if w.Header().Get("Last-Modified") != expectedModTime {
+		t.Errorf("Incorrect Last-Modified received, expected: '%v' got: '%v'",
+			expectedModTime,
+			w.Header().Get("Last-Modified"))
+	}
+
+	// check that repo is cached
+	_, err = os.Stat(path.Join(testPacolocoDir, "pkgs", "repo2"))
+	if os.IsNotExist(err) {
+		t.Error("repo2 repo should be cached")
+	}
+	defer os.RemoveAll(path.Join(testPacolocoDir, "pkgs", "repo2"))
+	content, err = ioutil.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo2", "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != dbFileContent {
+		t.Errorf("Got incorrect db content: %v", string(content))
+	}
+
+	// Now let's modify the db content, pacoloco should refetch it
+	dbFileContent = "This is a new content"
+	if err := ioutil.WriteFile(dbAtMirror, []byte(dbFileContent), os.ModePerm); err != nil {
+		t.Fatal(err)
+	}
+	newDbModTime := time.Now()
+	os.Chtimes(dbAtMirror, newDbModTime, newDbModTime)
+
+	req = httptest.NewRequest("GET", pacolocoURL+"/repo/repo2/test.db", nil)
+	w = httptest.NewRecorder()
+	pacolocoHandler(w, req)
+	resp = w.Result()
+	if resp.StatusCode != 200 {
+		t.Errorf("200 response expected, got %v", resp.StatusCode)
+	}
+	content, err = ioutil.ReadAll(w.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != dbFileContent {
+		t.Errorf("Pacoloco cached incorrect db content: %v", string(content))
+	}
+
+	// check that repo is cached
+	_, err = os.Stat(path.Join(testPacolocoDir, "pkgs", "repo2"))
+	if os.IsNotExist(err) {
+		t.Error("repo2 repo should be cached")
+	}
+	content, err = ioutil.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo2", "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != dbFileContent {
+		t.Errorf("Got incorrect db content: %v", string(content))
+	}
+	if resp.ContentLength != int64(len(dbFileContent)) {
+		t.Errorf("Pacoloco returns incorrect lenght %v", resp.ContentLength)
+	}
+	newExpectedModTime := newDbModTime.UTC().Format(http.TimeFormat)
+	if w.Header().Get("Last-Modified") != newExpectedModTime {
+		t.Errorf("Incorrect Last-Modified received, expected: '%v' got: '%v'",
+			newExpectedModTime,
+			w.Header().Get("Last-Modified"))
+	}
+}
+
+func testRequestPackageFile(t *testing.T) {
+	// Requesting existing repo
+	config.Repos["repo3"] = Repo{
+		Url: mirrorURL + "/mirror3",
+	}
+	defer delete(config.Repos, "repo3")
+
+	if err := os.Mkdir(path.Join(mirrorDir, "mirror3"), os.ModePerm); err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(path.Join(mirrorDir, "mirror3"))
+
+	pkgAtMirror := path.Join(mirrorDir, "mirror3", "test-1-any.pkg.tar.zst")
+	pkgFileContent := "a package"
+	if err := ioutil.WriteFile(pkgAtMirror, []byte(pkgFileContent), os.ModePerm); err != nil {
+		t.Fatal(err)
+	}
+	// Make the mirror file old enough to distinguish it from the subsequent modifications
+	pkgModTime := time.Now().Add(-time.Hour)
+	os.Chtimes(pkgAtMirror, pkgModTime, pkgModTime)
+
+	req := httptest.NewRequest("GET", pacolocoURL+"/repo/repo3/test-1-any.pkg.tar.zst", nil)
+	w := httptest.NewRecorder()
+	pacolocoHandler(w, req)
+	resp := w.Result()
+
+	defer os.RemoveAll(path.Join(testPacolocoDir, "pkgs", "repo3")) // remove cached content
+
+	if resp.StatusCode != 200 {
+		t.Errorf("200 response expected, got %v", resp.StatusCode)
+	}
+	content, err := ioutil.ReadAll(w.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != pkgFileContent {
+		t.Errorf("Pacoloco cached incorrect pkg content: %v", string(content))
+	}
+	if resp.ContentLength != int64(len(pkgFileContent)) {
+		t.Errorf("Pacoloco returns incorrect lenght %v", resp.ContentLength)
+	}
+	expectedModTime := pkgModTime.UTC().Format(http.TimeFormat)
+	if w.Header().Get("Last-Modified") != expectedModTime {
+		t.Errorf("Incorrect Last-Modified received, expected: '%v' got: '%v'",
+			expectedModTime,
+			w.Header().Get("Last-Modified"))
+	}
+
+	// check that pkg is cached
+	content, err = ioutil.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo3", "test-1-any.pkg.tar.zst"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != pkgFileContent {
+		t.Errorf("Got incorrect db content: %v", string(content))
+	}
+
+	// Now let's modify the db content, pacoloco should not refetch it
+	if err := ioutil.WriteFile(pkgAtMirror, []byte("This is a new content"), os.ModePerm); err != nil {
+		t.Fatal(err)
+	}
+	newDbModTime := time.Now()
+	os.Chtimes(pkgAtMirror, newDbModTime, newDbModTime)
+
+	req = httptest.NewRequest("GET", pacolocoURL+"/repo/repo3/test-1-any.pkg.tar.zst", nil)
+	w = httptest.NewRecorder()
+	pacolocoHandler(w, req)
+	resp = w.Result()
+	if resp.StatusCode != 200 {
+		t.Errorf("200 response expected, got %v", resp.StatusCode)
+	}
+	content, err = ioutil.ReadAll(w.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != pkgFileContent {
+		t.Errorf("Pacoloco cached incorrect db content: %v", string(content))
+	}
+
+	// check that repo is cached
+	content, err = ioutil.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo3", "test-1-any.pkg.tar.zst"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != pkgFileContent {
+		t.Errorf("Got incorrect pkg content: %v", string(content))
+	}
+	if resp.ContentLength != int64(len(pkgFileContent)) {
+		t.Errorf("Pacoloco returns incorrect lenght %v", resp.ContentLength)
+	}
+	if w.Header().Get("Last-Modified") != expectedModTime {
+		t.Errorf("Incorrect Last-Modified received, expected: '%v' got: '%v'",
+			expectedModTime,
+			w.Header().Get("Last-Modified"))
+	}
+}
+
+func testFailover(t *testing.T) {
+	config.Repos["failover"] = Repo{
+		Urls: []string{mirrorURL + "/no-mirror", mirrorURL + "/mirror-failover"},
+	}
+	defer delete(config.Repos, "failover")
+
+	if err := os.Mkdir(path.Join(mirrorDir, "mirror-failover"), os.ModePerm); err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(path.Join(mirrorDir, "mirror-failover"))
+
+	pkgAtMirror := path.Join(mirrorDir, "mirror-failover", "test-1-any.pkg.tar.zst")
+	pkgFileContent := "failover content"
+	if err := ioutil.WriteFile(pkgAtMirror, []byte(pkgFileContent), os.ModePerm); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest("GET", pacolocoURL+"/repo/failover/test-1-any.pkg.tar.zst", nil)
+	w := httptest.NewRecorder()
+	pacolocoHandler(w, req)
+	resp := w.Result()
+
+	defer os.RemoveAll(path.Join(testPacolocoDir, "pkgs", "failover")) // remove cached content
+
+	if resp.StatusCode != 200 {
+		t.Errorf("200 response expected, got %v", resp.StatusCode)
+	}
+	content, err := ioutil.ReadAll(w.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != pkgFileContent {
+		t.Errorf("Pacoloco cached incorrect pkg content: %v", string(content))
+	}
+	if resp.ContentLength != int64(len(pkgFileContent)) {
+		t.Errorf("Pacoloco returns incorrect lenght %v", resp.ContentLength)
+	}
+}
