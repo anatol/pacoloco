@@ -1,0 +1,56 @@
+package main
+
+import (
+	"log"
+	"os"
+	"path/filepath"
+	"syscall"
+	"time"
+)
+
+func setupPurgeStaleFilesRoutine() *time.Ticker {
+	ticker := time.NewTicker(time.Duration(24) * time.Hour) // purge files once a day
+	go func() {
+		purgeStaleFiles(config.CacheDir, config.PurgeFilesAfter)
+		for {
+			select {
+			case <-ticker.C:
+				purgeStaleFiles(config.CacheDir, config.PurgeFilesAfter)
+			}
+		}
+	}()
+
+	return ticker
+}
+
+// purgeStaleFiles purges files in the pacoloco cache
+// it recursively scans `cacheDir`/pkgs and if the file access time is older than
+// `now` - purgeFilesAfter(seconds) then the file gets removed
+func purgeStaleFiles(cacheDir string, purgeFilesAfter int) {
+	removeIfOlder := time.Now().Add(time.Duration(-purgeFilesAfter) * time.Second)
+
+	// Go through all files in the repos, and check if access time is older than `cleanIfOlder`
+	err := filepath.Walk(filepath.Join(cacheDir, "pkgs"),
+		func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if !info.Mode().IsRegular() {
+				return nil
+			}
+
+			atimeUnix := info.Sys().(*syscall.Stat_t).Atim
+			atime := time.Unix(atimeUnix.Sec, atimeUnix.Nsec)
+			if atime.Before(removeIfOlder) {
+				log.Printf("Remove stale file %v as its access time (%v) is too old", path, atime)
+				err := os.Remove(path)
+				if err != nil {
+					log.Print(err)
+				}
+			}
+			return nil
+		})
+	if err != nil {
+		log.Println(err)
+	}
+}

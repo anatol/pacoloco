@@ -28,8 +28,9 @@ Optionally you can build the binary from sources using `go build` command.
 The server configuration is located at `/etc/pacoloco.yaml`. Here is an example how the config file looks like:
 
 ```
-cache_dir: /var/cache/pacoloco
 port: 9129
+cache_dir: /var/cache/pacoloco
+purge_files_after: 360000 # 360000 seconds or 100 hours
 repos:
   archlinux:
     urls:
@@ -41,7 +42,10 @@ repos:
     url: https://download.sublimetext.com/arch/stable/x86_64
 ```
 
-`cache_dir` is the cache directory, this location needs to read/writable by the server process. `port` is the server port. `repos` is a list of repositories to mirror. Each repo needs `name` and url of its Arch mirrors. Note that url can be specified either with `url` or `urls` properties, one and only one can be used for each repo configuration.
+`cache_dir` is the cache directory, this location needs to read/writable by the server process.
+`purge_files_after` specifies inactivity duration (in seconds) after which the file should be removed from the cache. This functionality uses unix "AccessTime" field to find out inactive files.
+`port` is the server port.
+`repos` is a list of repositories to mirror. Each repo needs `name` and url of its Arch mirrors. Note that url can be specified either with `url` or `urls` properties, one and only one can be used for each repo configuration.
 
 With the example configured above `http://YOURSERVER:9129/repo/archlinux` looks exactly like an Arch pacman mirror.
 For example a request to `http://YOURSERVER:9129/repo/archlinux/core/os/x86_64/openssh-8.2p1-3-x86_64.pkg.tar.zst` will be served with file content from `http://mirror.lty.me/archlinux/core/os/x86_64/openssh-8.2p1-3-x86_64.pkg.tar.zst`

@@ -1,5 +1,6 @@
-cache_dir: /tmp
 port: 9129
+cache_dir: /tmp
+purge_files_after: 2592000 # 3600 * 24 * 30days
 repos:
   archlinux:
     urls:

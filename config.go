@@ -17,15 +17,20 @@ type Repo struct {
 }
 
 type Config struct {
-	CacheDir string          `yaml:"cache_dir"`
-	Port     int             `yaml:"port"`
-	Repos    map[string]Repo `yaml:"repos,omitempty"`
+	CacheDir        string          `yaml:"cache_dir"`
+	Port            int             `yaml:"port"`
+	Repos           map[string]Repo `yaml:"repos,omitempty"`
+	PurgeFilesAfter int             `yaml:"purge_files_after"`
 }
 
 var config *Config
 
 func readConfig(filename string) *Config {
-	var result = &Config{CacheDir: DefaultCacheDir, Port: DefaultPort}
+	var result = &Config{
+		CacheDir:        DefaultCacheDir,
+		Port:            DefaultPort,
+		PurgeFilesAfter: 3600 * 24 * 30, // purge files if they are not accessed for 30 days
+	}
 	yamlFile, err := ioutil.ReadFile(filename)
 	if err != nil {
 		log.Fatal(err)
@@ -43,6 +48,10 @@ func readConfig(filename string) *Config {
 		if repo.Url == "" && len(repo.Urls) == 0 {
 			log.Fatalf("please specify url for repo '%v'", name)
 		}
+	}
+
+	if result.PurgeFilesAfter < 10*60 {
+		log.Fatalf("purge_files_after period is too low (%v) please specify at least 10 minutes", result.PurgeFilesAfter)
 	}
 
 	if unix.Access(result.CacheDir, unix.R_OK|unix.W_OK) != nil {

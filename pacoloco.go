@@ -32,6 +32,9 @@ func main() {
 	log.Print("Reading config file from ", *configFile)
 	config = readConfig(*configFile)
 
+	cleanupTicker := setupPurgeStaleFilesRoutine()
+	defer cleanupTicker.Stop()
+
 	listenAddr := fmt.Sprintf(":%d", config.Port)
 	log.Println("Starting server at port", config.Port)
 	// The request path looks like '/repo/$reponame/$pathatmirror'
@@ -196,6 +199,7 @@ func downloadFile(url string, filePath string, ifModifiedSince time.Time, client
 	_ = file.Close() // Close the file early to make sure the file modification time is set
 	if err != nil {
 		// remove the cached file if download was not successful
+		log.Print(err)
 		_ = os.Remove(filePath)
 		return
 	}
@@ -205,7 +209,7 @@ func downloadFile(url string, filePath string, ifModifiedSince time.Time, client
 		lastModified, parseErr := http.ParseTime(lastModified)
 		err = parseErr
 		if err == nil {
-			err = os.Chtimes(filePath, lastModified, lastModified)
+			err = os.Chtimes(filePath, time.Now(), lastModified)
 			if err != nil {
 				return
 			}
