@@ -28,29 +28,29 @@ func setupPurgeStaleFilesRoutine() *time.Ticker {
 // `now` - purgeFilesAfter(seconds) then the file gets removed
 func purgeStaleFiles(cacheDir string, purgeFilesAfter int) {
 	removeIfOlder := time.Now().Add(time.Duration(-purgeFilesAfter) * time.Second)
+	pkgDir := filepath.Join(cacheDir, "pkgs")
 
-	// Go through all files in the repos, and check if access time is older than `cleanIfOlder`
-	err := filepath.Walk(filepath.Join(cacheDir, "pkgs"),
-		func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-			if !info.Mode().IsRegular() {
-				return nil
-			}
-
-			atimeUnix := info.Sys().(*syscall.Stat_t).Atim
-			atime := time.Unix(atimeUnix.Sec, atimeUnix.Nsec)
-			if atime.Before(removeIfOlder) {
-				log.Printf("Remove stale file %v as its access time (%v) is too old", path, atime)
-				err := os.Remove(path)
-				if err != nil {
-					log.Print(err)
-				}
-			}
+	// Go through all files in the repos, and check if access time is older than `removeIfOlder`
+	walkfn := func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
 			return nil
-		})
-	if err != nil {
+		}
+
+		atimeUnix := info.Sys().(*syscall.Stat_t).Atim
+		atime := time.Unix(atimeUnix.Sec, atimeUnix.Nsec)
+		if atime.Before(removeIfOlder) {
+			log.Printf("Remove stale file %v as its access time (%v) is too old", path, atime)
+			err := os.Remove(path)
+			if err != nil {
+				log.Print(err)
+			}
+		}
+		return nil
+	}
+	if err := filepath.Walk(pkgDir, walkfn); err != nil {
 		log.Println(err)
 	}
 }
