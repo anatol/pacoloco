@@ -1,5 +1,6 @@
-cache_dir: /tmp
-port: 9129
+# cache_dir: /var/cache/pacoloco
+# port: 9129
+# purge_files_after: 2592000 # purge file after 30 days
 repos:
   archlinux:
     urls:
