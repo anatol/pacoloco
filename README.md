@@ -75,3 +75,24 @@ Server = http://yourpacoloco:9129/repo/archlinux/$repo/os/$arch
 ```
 
 That's it. Since now pacman requests will be proxied through our pacoloco server.
+
+## Note
+
+*pacoloco* does not care about the arch of your repo as it acts as a mere proxy.
+
+So it handles fine different arches, even at the same time.
+If you need different *architectures*, use multiple different repos; for example:
+
+    repos:
+      archlinux_x86_64:
+        urls:
+          - http://mirror.lty.me/archlinux
+          - http://mirrors.kernel.org/archlinux
+      archlinux_armv7h:
+        url: http://mirror.archlinuxarm.org/
+      archlinux_x86:
+        url: http://mirror.clarkson.edu/archlinux32/
+
+Then modify `/etc/pacman.d/mirrorlist` to use the repo with the required architecture a.k.a `http://myserver:9129/repo/archlinux_<arch>` for the machine of architecture `<arch>`
+
+Watch out that it ends with `$arch/$repo` on *archlinux-arm* and *archlinux32* instead of `$repo/os/$arch`
