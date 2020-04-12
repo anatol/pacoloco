@@ -138,7 +138,7 @@ func testRequestExistingRepoWithDb(t *testing.T) {
 		t.Errorf("Pacoloco cached incorrect db content: %v", string(content))
 	}
 	if resp.ContentLength != int64(len(dbFileContent)) {
-		t.Errorf("Pacoloco returns incorrect lenght %v", resp.ContentLength)
+		t.Errorf("Pacoloco returns incorrect length %v", resp.ContentLength)
 	}
 	expectedModTime := dbModTime.UTC().Format(http.TimeFormat)
 	if w.Header().Get("Last-Modified") != expectedModTime {
@@ -197,7 +197,7 @@ func testRequestExistingRepoWithDb(t *testing.T) {
 		t.Errorf("Got incorrect db content: %v", string(content))
 	}
 	if resp.ContentLength != int64(len(dbFileContent)) {
-		t.Errorf("Pacoloco returns incorrect lenght %v", resp.ContentLength)
+		t.Errorf("Pacoloco returns incorrect length %v", resp.ContentLength)
 	}
 	newExpectedModTime := newDbModTime.UTC().Format(http.TimeFormat)
 	if w.Header().Get("Last-Modified") != newExpectedModTime {
@@ -246,7 +246,7 @@ func testRequestPackageFile(t *testing.T) {
 		t.Errorf("Pacoloco cached incorrect pkg content: %v", string(content))
 	}
 	if resp.ContentLength != int64(len(pkgFileContent)) {
-		t.Errorf("Pacoloco returns incorrect lenght %v", resp.ContentLength)
+		t.Errorf("Pacoloco returns incorrect length %v", resp.ContentLength)
 	}
 	expectedModTime := pkgModTime.UTC().Format(http.TimeFormat)
 	if w.Header().Get("Last-Modified") != expectedModTime {
@@ -295,7 +295,7 @@ func testRequestPackageFile(t *testing.T) {
 		t.Errorf("Got incorrect pkg content: %v", string(content))
 	}
 	if resp.ContentLength != int64(len(pkgFileContent)) {
-		t.Errorf("Pacoloco returns incorrect lenght %v", resp.ContentLength)
+		t.Errorf("Pacoloco returns incorrect length %v", resp.ContentLength)
 	}
 	if w.Header().Get("Last-Modified") != expectedModTime {
 		t.Errorf("Incorrect Last-Modified received, expected: '%v' got: '%v'",
@@ -339,6 +339,6 @@ func testFailover(t *testing.T) {
 		t.Errorf("Pacoloco cached incorrect pkg content: %v", string(content))
 	}
 	if resp.ContentLength != int64(len(pkgFileContent)) {
-		t.Errorf("Pacoloco returns incorrect lenght %v", resp.ContentLength)
+		t.Errorf("Pacoloco returns incorrect length %v", resp.ContentLength)
 	}
 }
