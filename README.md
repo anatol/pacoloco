@@ -94,5 +94,5 @@ repos:
     url: http://mirror.clarkson.edu/archlinux32
 ```
 
-Then modify `/etc/pacman.d/mirrorlist` and add `Server = http://yourpacoloco:9129/repo/archlinux_$repo`.
+Then modify `/etc/pacman.d/mirrorlist` and add `Server = http://yourpacoloco:9129/repo/archlinux_$arch`.
 Please note that `$arch` is used as a part of repo name rather than path.
