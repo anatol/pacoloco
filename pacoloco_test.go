@@ -1,11 +1,12 @@
 package main
 
 import (
-	"github.com/google/go-cmp/cmp"
 	"io/ioutil"
 	"log"
 	"os"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestMain(m *testing.M) {

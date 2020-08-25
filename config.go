@@ -1,11 +1,12 @@
 package main
 
 import (
-	"golang.org/x/sys/unix"
-	"gopkg.in/yaml.v3"
 	"io/ioutil"
 	"log"
 	"os/user"
+
+	"golang.org/x/sys/unix"
+	"gopkg.in/yaml.v3"
 )
 
 const DefaultPort = 9129
