@@ -103,14 +103,15 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 	if requestFromServer {
 		mutexKey := repoName + ":" + fileName
 		downloadingFilesMutex.Lock()
-		_, ok = downloadingFiles[mutexKey]
+		fileMutex, ok := downloadingFiles[mutexKey]
 		if !ok {
-			downloadingFiles[mutexKey] = &sync.Mutex{}
+			fileMutex = &sync.Mutex{}
+			downloadingFiles[mutexKey] = fileMutex
 		}
-		fileMutex := downloadingFiles[mutexKey]
 		downloadingFilesMutex.Unlock()
 		fileMutex.Lock()
 		defer func() {
+			fileMutex.Unlock()
 			downloadingFilesMutex.Lock()
 			delete(downloadingFiles, mutexKey)
 			downloadingFilesMutex.Unlock()
