@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -153,7 +154,14 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 // file and sends to `clientWriter` at the same time.
 // The function returns whether the function sent the data to client and error if one occurred
 func downloadFile(url string, filePath string, ifModifiedSince time.Time, clientWriter http.ResponseWriter) (err error, served bool) {
-	req, err := http.NewRequest("GET", url, nil)
+	var req *http.Request
+	if config.DownloadTimeout > 0 {
+		ctx, ctxCancel := context.WithTimeout(context.Background(), time.Duration(config.DownloadTimeout)*time.Second)
+		defer ctxCancel()
+		req, err = http.NewRequestWithContext(ctx, "GET", url, nil)
+	} else {
+		req, err = http.NewRequest("GET", url, nil)
+	}
 	if err != nil {
 		return
 	}

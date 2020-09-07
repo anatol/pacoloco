@@ -22,6 +22,7 @@ type Config struct {
 	Port            int             `yaml:"port"`
 	Repos           map[string]Repo `yaml:"repos,omitempty"`
 	PurgeFilesAfter int             `yaml:"purge_files_after"`
+	DownloadTimeout int             `yaml:"download_timeout"`
 }
 
 var config *Config
