@@ -31,6 +31,7 @@ The server configuration is located at `/etc/pacoloco.yaml`. Here is an example 
 port: 9129
 cache_dir: /var/cache/pacoloco
 purge_files_after: 360000 # 360000 seconds or 100 hours
+download_timeout: 20 # 20 seconds
 repos:
   archlinux:
     urls:
@@ -45,6 +46,7 @@ repos:
 `cache_dir` is the cache directory, this location needs to read/writable by the server process.
 `purge_files_after` specifies inactivity duration (in seconds) after which the file should be removed from the cache. This functionality uses unix "AccessTime" field to find out inactive files.
 `port` is the server port.
+`download_timeout` is a timeout (in seconds) for stuck downloads. A file download that takes longer than this will be terminated.
 `repos` is a list of repositories to mirror. Each repo needs `name` and url of its Arch mirrors. Note that url can be specified either with `url` or `urls` properties, one and only one can be used for each repo configuration.
 
 With the example configured above `http://YOURSERVER:9129/repo/archlinux` looks exactly like an Arch pacman mirror.

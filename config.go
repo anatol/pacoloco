@@ -22,6 +22,7 @@ type Config struct {
 	Port            int             `yaml:"port"`
 	Repos           map[string]Repo `yaml:"repos,omitempty"`
 	PurgeFilesAfter int             `yaml:"purge_files_after"`
+	DownloadTimeout int             `yaml:"download_timeout"`
 }
 
 var config *Config
@@ -31,6 +32,7 @@ func readConfig(filename string) *Config {
 		CacheDir:        DefaultCacheDir,
 		Port:            DefaultPort,
 		PurgeFilesAfter: 3600 * 24 * 30, // purge files if they are not accessed for 30 days
+		DownloadTimeout: 20, // stuck downloads will timeout after 20 sec
 	}
 	yamlFile, err := ioutil.ReadFile(filename)
 	if err != nil {

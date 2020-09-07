@@ -40,6 +40,7 @@ func TestPacolocoIntegration(t *testing.T) {
 		CacheDir:        testPacolocoDir,
 		Port:            -1,
 		PurgeFilesAfter: -1,
+		DownloadTimeout: -1,
 		Repos:           make(map[string]Repo),
 	}
 
