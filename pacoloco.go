@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -31,7 +32,11 @@ func main() {
 	log.SetFlags(log.Lshortfile)
 
 	log.Print("Reading config file from ", *configFile)
-	config = readConfig(*configFile)
+	yaml, err := ioutil.ReadFile(*configFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	config = parseConfig(yaml)
 
 	cleanupTicker := setupPurgeStaleFilesRoutine()
 	defer cleanupTicker.Stop()
