@@ -49,3 +49,28 @@ repos:
 		t.Errorf("got %v, want %v", *got, *want)
 	}
 }
+
+// test that config works without `purgeFilesAfter`
+func TestWithoutPurgeFilesAfter(t *testing.T) {
+	got := parseConfig([]byte(`
+cache_dir: /tmp
+repos:
+  archlinux:
+    url: http://mirrors.kernel.org/archlinux
+`))
+	want := &Config{
+		CacheDir: `/tmp`,
+		Port:     9129,
+		Repos: map[string]Repo{
+			"archlinux": Repo{
+				Url: "http://mirrors.kernel.org/archlinux",
+			},
+		},
+		PurgeFilesAfter: 0,
+		DownloadTimeout: 0,
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", *got, *want)
+	}
+}

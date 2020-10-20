@@ -28,9 +28,8 @@ var config *Config
 
 func parseConfig(raw []byte) *Config {
 	var result = &Config{
-		CacheDir:        DefaultCacheDir,
-		Port:            DefaultPort,
-		PurgeFilesAfter: 3600 * 24 * 30, // purge files if they are not accessed for 30 days
+		CacheDir: DefaultCacheDir,
+		Port:     DefaultPort,
 	}
 
 	if err := yaml.Unmarshal(raw, &result); err != nil {
@@ -47,7 +46,7 @@ func parseConfig(raw []byte) *Config {
 		}
 	}
 
-	if result.PurgeFilesAfter < 10*60 {
+	if result.PurgeFilesAfter < 10*60 && result.PurgeFilesAfter != 0 {
 		log.Fatalf("purge_files_after period is too low (%v) please specify at least 10 minutes", result.PurgeFilesAfter)
 	}
 

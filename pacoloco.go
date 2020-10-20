@@ -38,8 +38,10 @@ func main() {
 	}
 	config = parseConfig(yaml)
 
-	cleanupTicker := setupPurgeStaleFilesRoutine()
-	defer cleanupTicker.Stop()
+	if config.PurgeFilesAfter != 0 {
+		cleanupTicker := setupPurgeStaleFilesRoutine()
+		defer cleanupTicker.Stop()
+	}
 
 	listenAddr := fmt.Sprintf(":%d", config.Port)
 	log.Println("Starting server at port", config.Port)
