@@ -27,6 +27,11 @@ func setupPurgeStaleFilesRoutine() *time.Ticker {
 // it recursively scans `cacheDir`/pkgs and if the file access time is older than
 // `now` - purgeFilesAfter(seconds) then the file gets removed
 func purgeStaleFiles(cacheDir string, purgeFilesAfter int) {
+	// safety check, so we don't unintentionally wipe the whole cache
+	if purgeFilesAfter == 0 {
+		log.Fatalf("Stopping because purgeFilesAfter=%v and that would purge the whole cache", purgeFilesAfter)
+	}
+
 	removeIfOlder := time.Now().Add(time.Duration(-purgeFilesAfter) * time.Second)
 	pkgDir := filepath.Join(cacheDir, "pkgs")
 
