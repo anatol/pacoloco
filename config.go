@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io/ioutil"
 	"log"
 	"os/user"
 
@@ -27,18 +26,14 @@ type Config struct {
 
 var config *Config
 
-func readConfig(filename string) *Config {
+func parseConfig(raw []byte) *Config {
 	var result = &Config{
 		CacheDir:        DefaultCacheDir,
 		Port:            DefaultPort,
 		PurgeFilesAfter: 3600 * 24 * 30, // purge files if they are not accessed for 30 days
 	}
-	yamlFile, err := ioutil.ReadFile(filename)
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = yaml.Unmarshal(yamlFile, &result)
-	if err != nil {
+
+	if err := yaml.Unmarshal(raw, &result); err != nil {
 		log.Fatal(err)
 	}
 
