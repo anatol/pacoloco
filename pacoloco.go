@@ -141,10 +141,10 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 		}
 
 		if repo.Url != "" {
-			err, served = downloadFile(repo.Url+path+"/"+fileName, filePath, ifLater, w)
+			served, err = downloadFile(repo.Url+path+"/"+fileName, filePath, ifLater, w)
 		} else {
 			for _, url := range repo.Urls {
-				err, served = downloadFile(url+path+"/"+fileName, filePath, ifLater, w)
+				served, err = downloadFile(url+path+"/"+fileName, filePath, ifLater, w)
 				if err == nil {
 					break
 				}
@@ -160,7 +160,7 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 // downloadFile downloads file from `url`, saves it to the given `localFileName`
 // file and sends to `clientWriter` at the same time.
 // The function returns whether the function sent the data to client and error if one occurred
-func downloadFile(url string, filePath string, ifModifiedSince time.Time, clientWriter http.ResponseWriter) (err error, served bool) {
+func downloadFile(url string, filePath string, ifModifiedSince time.Time, clientWriter http.ResponseWriter) (served bool, err error) {
 	var req *http.Request
 	if config.DownloadTimeout > 0 {
 		ctx, ctxCancel := context.WithTimeout(context.Background(), time.Duration(config.DownloadTimeout)*time.Second)
