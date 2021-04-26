@@ -12,4 +12,6 @@ WORKDIR /pacoloco
 
 COPY --from=build /build/pacoloco .
 
+EXPOSE 9129
+
 CMD ["/pacoloco/pacoloco"]
