@@ -18,8 +18,12 @@ _Pacoloco_ does not mirror the whole Arch repository. It only downloads files ne
 You can think of pacoloco as a lazy Arch mirror.
 
 ## Install
+### Arch systems
 Install [pacoloco-git package](https://aur.archlinux.org/packages/pacoloco-git/) from AUR repository.
 Then start its systemd service: `# systemctl start pacoloco`.
+### Docker
+There is a pacoloco docker image available. It can be used with:
+`docker run -p 9129:9129 -v /path/to/config/pacoloco.yaml:/etc/pacoloco.yaml -v /path/to/cache:/var/cache/pacoloco/pkgs pacoloco`. You need to provide a config file and a path to store the package cache.
 
 ## Build from sources
 Optionally you can build the binary from sources using `go build` command.
