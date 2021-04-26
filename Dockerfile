@@ -1,15 +1,15 @@
-FROM golang:latest
+FROM golang:latest as build
 
-WORKDIR /pacoloco
+WORKDIR /build
 
 COPY . .
 
-RUN go build
+RUN CGO_ENABLED=0 go build -ldflags="-s -w"
 
-RUN useradd pacoloco
-RUN mkdir -p /var/cache/pacoloco/pkgs
-RUN chown -R pacoloco:pacoloco /var/cache/pacoloco/
+FROM scratch
 
-USER pacoloco
+WORKDIR /pacoloco
 
-CMD ./pacoloco
+COPY --from=build /build/pacoloco .
+
+CMD ["/pacoloco/pacoloco"]
