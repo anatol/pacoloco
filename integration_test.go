@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,52 @@ var mirrorURL string
 var pacolocoURL string
 var testPacolocoDir string
 var mirrorDir string
+
+// the same as TestPacolocoIntegration, but with prefetching things
+func TestPacolocoIntegrationWithPrefetching(t *testing.T) {
+	var err error
+	mirrorDir, err = ioutil.TempDir(os.TempDir(), "*-pacoloco-mirror")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(mirrorDir)
+
+	// For easier setup we are going to serve several Arch mirror trees by one
+	// instance of http.FileServer
+	mirror := httptest.NewServer(http.FileServer(http.Dir(mirrorDir)))
+	defer mirror.Close()
+	mirrorURL = mirror.URL
+
+	// Now setup pacoloco cache dir
+	testPacolocoDir, err = ioutil.TempDir(os.TempDir(), "*-pacoloco-repo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(testPacolocoDir)
+	notInvokingPrefetchTime := time.Now().Add(-(time.Duration(time.Hour))) // an hour ago
+	config = &Config{
+		CacheDir:        testPacolocoDir,
+		Port:            -1,
+		PurgeFilesAfter: -1,
+		DownloadTimeout: 999,
+		Repos:           make(map[string]Repo),
+		Prefetch:        &RefreshPeriod{Cron: "0 0 " + fmt.Sprint(notInvokingPrefetchTime.Hour()) + " ? * 1#1 *"},
+	}
+	setupPrefetch()
+	pacoloco := httptest.NewServer(http.HandlerFunc(pacolocoHandler))
+	defer pacoloco.Close()
+	pacolocoURL = pacoloco.URL
+
+	t.Run("testInvalidURL", testInvalidURL)
+	t.Run("testRequestNonExistingDb", testRequestNonExistingDb)
+	t.Run("testRequestExistingRepo", testRequestExistingRepo)
+	t.Run("testRequestExistingRepoWithDb", testRequestExistingRepoWithDb)
+	t.Run("testRequestPackageFile", testRequestPackageFile)
+	t.Run("testFailover", testFailover)
+	if _, err := os.Stat(path.Join(testPacolocoDir, DefaultDBName)); os.IsNotExist(err) {
+		t.Errorf("DB file should be created!")
+	}
+}
 
 func TestPacolocoIntegration(t *testing.T) {
 	var err error
@@ -42,6 +89,7 @@ func TestPacolocoIntegration(t *testing.T) {
 		PurgeFilesAfter: -1,
 		DownloadTimeout: 999,
 		Repos:           make(map[string]Repo),
+		Prefetch:        nil,
 	}
 
 	pacoloco := httptest.NewServer(http.HandlerFunc(pacolocoHandler))
@@ -54,6 +102,9 @@ func TestPacolocoIntegration(t *testing.T) {
 	t.Run("testRequestExistingRepoWithDb", testRequestExistingRepoWithDb)
 	t.Run("testRequestPackageFile", testRequestPackageFile)
 	t.Run("testFailover", testFailover)
+	if _, err := os.Stat(path.Join(testPacolocoDir, DefaultDBName)); !os.IsNotExist(err) {
+		t.Errorf("DB file shouldn't be created!")
+	}
 }
 
 func testInvalidURL(t *testing.T) {
@@ -77,8 +128,7 @@ func testRequestNonExistingDb(t *testing.T) {
 	}
 
 	// check that no repo cached
-	_, err := os.Stat(path.Join(testPacolocoDir, "pkgs", "test"))
-	if !os.IsNotExist(err) {
+	if _, err := os.Stat(path.Join(testPacolocoDir, "pkgs", "test")); !os.IsNotExist(err) {
 		t.Error("test repo should not cached")
 	}
 }
@@ -97,8 +147,7 @@ func testRequestExistingRepo(t *testing.T) {
 	}
 
 	// check that db is not cached
-	_, err := os.Stat(path.Join(testPacolocoDir, "pkgs", "repo1", "test.db"))
-	if !os.IsNotExist(err) {
+	if _, err := os.Stat(path.Join(testPacolocoDir, "pkgs", "repo1", "test.db")); !os.IsNotExist(err) {
 		t.Error("repo1/test.db should be cached")
 	}
 }
@@ -106,7 +155,7 @@ func testRequestExistingRepo(t *testing.T) {
 func testRequestExistingRepoWithDb(t *testing.T) {
 	// Requesting existing repo
 	config.Repos["repo2"] = Repo{
-		Url: mirrorURL + "/mirror2",
+		URL: mirrorURL + "/mirror2",
 	}
 	defer delete(config.Repos, "repo2")
 
@@ -117,6 +166,7 @@ func testRequestExistingRepoWithDb(t *testing.T) {
 
 	dbAtMirror := path.Join(mirrorDir, "mirror2", "test.db")
 	dbFileContent := "pacoloco/mirror2.db"
+
 	if err := ioutil.WriteFile(dbAtMirror, []byte(dbFileContent), os.ModePerm); err != nil {
 		t.Fatal(err)
 	}
@@ -149,8 +199,7 @@ func testRequestExistingRepoWithDb(t *testing.T) {
 	}
 
 	// check that repo is cached
-	_, err = os.Stat(path.Join(testPacolocoDir, "pkgs", "repo2"))
-	if os.IsNotExist(err) {
+	if _, err = os.Stat(path.Join(testPacolocoDir, "pkgs", "repo2")); os.IsNotExist(err) {
 		t.Error("repo2 repo should be cached")
 	}
 	defer os.RemoveAll(path.Join(testPacolocoDir, "pkgs", "repo2"))
@@ -186,8 +235,7 @@ func testRequestExistingRepoWithDb(t *testing.T) {
 	}
 
 	// check that repo is cached
-	_, err = os.Stat(path.Join(testPacolocoDir, "pkgs", "repo2"))
-	if os.IsNotExist(err) {
+	if _, err = os.Stat(path.Join(testPacolocoDir, "pkgs", "repo2")); os.IsNotExist(err) {
 		t.Error("repo2 repo should be cached")
 	}
 	content, err = ioutil.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo2", "test.db"))
@@ -211,7 +259,7 @@ func testRequestExistingRepoWithDb(t *testing.T) {
 func testRequestPackageFile(t *testing.T) {
 	// Requesting existing repo
 	config.Repos["repo3"] = Repo{
-		Url: mirrorURL + "/mirror3",
+		URL: mirrorURL + "/mirror3",
 	}
 	defer delete(config.Repos, "repo3")
 
@@ -307,7 +355,7 @@ func testRequestPackageFile(t *testing.T) {
 
 func testFailover(t *testing.T) {
 	config.Repos["failover"] = Repo{
-		Urls: []string{mirrorURL + "/no-mirror", mirrorURL + "/mirror-failover"},
+		URLs: []string{mirrorURL + "/no-mirror", mirrorURL + "/mirror-failover"},
 	}
 	defer delete(config.Repos, "failover")
 

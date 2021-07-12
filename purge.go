@@ -49,8 +49,7 @@ func purgeStaleFiles(cacheDir string, purgeFilesAfter int) {
 		atime := time.Unix(int64(atimeUnix.Sec), int64(atimeUnix.Nsec))
 		if atime.Before(removeIfOlder) {
 			log.Printf("Remove stale file %v as its access time (%v) is too old", path, atime)
-			err := os.Remove(path)
-			if err != nil {
+			if err := os.Remove(path); err != nil {
 				log.Print(err)
 			}
 		}
