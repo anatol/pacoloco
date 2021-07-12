@@ -19,8 +19,7 @@ func TestPurge(t *testing.T) {
 	defer os.RemoveAll(testPacolocoDir) // clean up
 
 	testRepo := path.Join(testPacolocoDir, "pkgs", "purgerepo")
-	err = os.MkdirAll(testRepo, os.ModePerm)
-	if err != nil {
+	if err := os.MkdirAll(testRepo, os.ModePerm); err != nil {
 		log.Fatal(err)
 	}
 
@@ -41,18 +40,15 @@ func TestPurge(t *testing.T) {
 
 	purgeStaleFiles(testPacolocoDir, purgeFilesAfter)
 
-	_, err = os.Stat(fileToRemove)
-	if !os.IsNotExist(err) {
+	if _, err := os.Stat(fileToRemove); !os.IsNotExist(err) {
 		t.Fail()
 	}
 
-	_, err = os.Stat(fileToStay)
-	if err != nil {
+	if _, err := os.Stat(fileToStay); err != nil {
 		t.Fail()
 	}
-
-	_, err = os.Stat(fileOutsideRepo) // files outside of the pkgs cache should not be touched
-	if err != nil {
+	// files outside of the pkgs cache should not be touched
+	if _, err := os.Stat(fileOutsideRepo); err != nil {
 		t.Fail()
 	}
 }
