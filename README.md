@@ -139,3 +139,11 @@ Server = http://yourpacoloco:9129/repo/archlinux_$arch/$arch/$repo
 ```
 
 Please note that `archlinux_$arch` is the repo name in pacoloco.yaml.
+
+## Credits
+
+Huge thanks to all the people who contributed to this project! Pacoloco would not be able to become successful without your help.
+
+<a href="https://github.com/anatol/pacoloco/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=anatol/pacoloco" />
+</a>
