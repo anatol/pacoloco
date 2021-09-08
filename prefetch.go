@@ -33,11 +33,11 @@ func setupPrefetchTicker() *time.Ticker {
 			ticker := time.NewTicker(duration) // set prefetch as specified in config file
 			log.Printf("The prefetching routine will be run on %v", time.Now().Add(duration))
 			go func() {
-				prefetchPackages()
-				for {
-					select {
-					case <-ticker.C:
+				lastTimeInvoked := time.Time{}
+				for range ticker.C {
+					if time.Since(lastTimeInvoked) > time.Second {
 						prefetchPackages()
+						lastTimeInvoked = time.Now()
 						now := time.Now()
 						duration, err := getPrefetchDuration(config.Prefetch.Cron, time.Now())
 						if err == nil && duration > 0 {
@@ -47,7 +47,7 @@ func setupPrefetchTicker() *time.Ticker {
 							ticker.Stop()
 							log.Printf("Prefetching disabled")
 						}
-					}
+					} // otherwise ignore it. It happened more than once that this function gets invoked twice for no reason
 				}
 			}()
 			return ticker
@@ -184,6 +184,36 @@ func cleanPrefetchDB() {
 		for _, pkgToDel := range deadPkgs {
 			purgePkgIfExists(&pkgToDel)
 		}
+		// delete mirror links which does not exist on the config file
+		mirrors := getAllMirrorsDB()
+		for _, mirror := range mirrors {
+			if repoLinks, exists := config.Repos[mirror.RepoName]; exists {
+				var URLs []string
+				if repoLinks.URL != "" {
+					URLs = append(URLs, repoLinks.URL)
+				} else {
+					URLs = repoLinks.URLs
+				}
+				// compare the mirror URL with the URLs in the config file
+				found := false
+				for _, URL := range URLs {
+					if strings.Contains(mirror.URL, URL) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					log.Printf("Deleting %v, mirror not found on config file", mirror.URL)
+					deleteMirrorDBFromDB(mirror)
+				}
+
+			} else {
+				// there is no repo with that name, I delete the mirrorDB entry
+				log.Printf("Deleting %v, repo %v does not exist", mirror.URL, mirror.RepoName)
+				deleteMirrorDBFromDB(mirror)
+			}
+		}
+
 		// should be useless but this guarantees that everything got cleaned properly
 		_ = deleteRepoTable()
 		log.Printf("Db cleaned.\n")
@@ -204,7 +234,11 @@ func prefetchAllPkgs() {
 		for _, url := range urls {
 			if err := prefetchRequest(url); err == nil {
 				purgePkgIfExists(&pkg) // delete the old package
-				log.Printf("Successfully prefetched package %v-%v\n", p.PackageName, p.Arch)
+				if strings.HasSuffix(url, ".sig") {
+					log.Printf("Successfully prefetched %v-%v signature\n", p.PackageName, p.Arch)
+				} else {
+					log.Printf("Successfully prefetched %v-%v package\n", p.PackageName, p.Arch)
+				}
 			} else {
 				failed = append(failed, fmt.Sprintf("Failed to prefetch package at %v because %v\n", url, err))
 			}

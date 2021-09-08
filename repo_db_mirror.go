@@ -41,6 +41,7 @@ func uncompressGZ(filePath string, targetFile string) error {
 	}
 	return nil
 }
+
 func extractFilenamesFromTar(filePath string) ([]string, error) {
 	f, err := os.Open(filePath)
 	reader := bufio.NewReader(f)
@@ -67,30 +68,71 @@ func extractFilenamesFromTar(filePath string) ([]string, error) {
 			}
 			pkgName := buf.String()
 			matches := filenameDBRegex.FindStringSubmatch(pkgName) // find %FILENAME% and read the following string
-			pkgName = matches[1]
-			pkgList = append(pkgList, pkgName)
+			if len(matches) == 2 {
+				pkgName = matches[1]
+				pkgList = append(pkgList, pkgName)
+			} else {
+				log.Printf("Skipping %v cause it doesn't match regex. This is probably a bug.", hdr.Name)
+				continue
+			}
 		}
 	}
 	return pkgList, nil
 }
 
 // This function returns a url which should download the exactly identical pkg when sent to pacoloco except for the file extension
-func getPacolocoURL(pkg Package) string {
-	return "/repo/" + pkg.RepoName + "/" + pkg.PackageName + "-" + pkg.Version + "-" + pkg.Arch
+func getPacolocoURL(pkg Package, prefix string) string {
+	return strings.ReplaceAll(("/repo/" + pkg.RepoName + "/" + prefix + "/" + pkg.PackageName + "-" + pkg.Version + "-" + pkg.Arch), "//", "/")
 }
 
 // Builds a repository package
-func buildRepoPkg(fileName string, repoName string) (RepoPackage, error) {
+// It requires the prefix, which is the relative path in which the db is contained
+func buildRepoPkg(fileName string, repoName string, prefix string) (RepoPackage, error) {
 	matches := filenameRegex.FindStringSubmatch(fileName)
 	if len(matches) >= 7 {
 		packageName := matches[1]
 		version := matches[2]
 		arch := matches[3]
 		pkg := Package{PackageName: packageName, Version: version, Arch: arch, RepoName: repoName}
-		pacolocoURL := getPacolocoURL(pkg)
+		pacolocoURL := getPacolocoURL(pkg, prefix)
 		return RepoPackage{PackageName: packageName, Version: version, Arch: arch, DownloadURL: pacolocoURL, RepoName: repoName}, nil
 	}
 	return RepoPackage{}, fmt.Errorf("filename %v does not match regex, matches length is %d", fileName, len(matches))
+}
+
+// Returns the "path" field from a mirror url, e.g. from
+// https://mirror.example.com/mirror/packages/archlinux//extra/os/x86_64/extra.db
+// it extracts /extra/os/x86_64
+func getPrefixFromMirrorDB(mirror MirrorDB) (string, error) {
+	if repoLinks, exists := config.Repos[mirror.RepoName]; exists {
+		var URLs []string
+		if repoLinks.URL != "" {
+			URLs = append(URLs, repoLinks.URL)
+		} else {
+			URLs = repoLinks.URLs
+		}
+		for _, URL := range URLs {
+			splittedURL := strings.Split(mirror.URL, URL)
+			if len(splittedURL) <= 1 {
+				continue // this is not the proper url
+			}
+			matches := mirrorDBRegex.FindStringSubmatch(splittedURL[1])
+			if len(matches) < 1 {
+				// It means that the path is empty, e.g. //extra.db or extra.db
+				return "", nil
+			}
+			if !strings.HasPrefix(matches[0], "/") {
+				return "/" + matches[0], nil
+			} else {
+				return matches[0], nil
+			}
+
+		}
+		return "", fmt.Errorf("Error: Mirror link %v does not exist in repo %v", mirror.URL, mirror.RepoName)
+	} else {
+		// This mirror link is a residual of an old config
+		return "", fmt.Errorf("Error: Mirror link %v is associated with repo %v which does not exist in config.", mirror.URL, mirror.RepoName)
+	}
 }
 
 // Downloads the db from the mirror and adds RepoPackages
@@ -98,6 +140,11 @@ func downloadAndLoadDB(mirror MirrorDB) error {
 	matches := urlRegex.FindStringSubmatch(mirror.URL)
 	if len(matches) == 0 {
 		return fmt.Errorf("url '%v' is invalid, does not match path regex", mirror.URL)
+	}
+	prefix, err := getPrefixFromMirrorDB(mirror)
+	if err != nil {
+		// If a mirror is invalid, don't download & load it
+		return err
 	}
 
 	fileName := matches[4]
@@ -115,35 +162,39 @@ func downloadAndLoadDB(mirror MirrorDB) error {
 	if _, err := downloadFile(mirror.URL, filePath, ifModifiedSince); err != nil {
 		return err
 	}
-
+	log.Printf("Extracting %v...", filePath)
 	// the db file exists and have been downloaded. Now it is time to decompress it
 	if err := uncompressGZ(filePath, filePath+".tar"); err != nil {
 		return err
 	}
-
 	// delete the original file
 	if err := os.Remove(filePath); err != nil {
 		return err
 	}
+	log.Printf("Parsing %v...", filePath+".tar")
 	fileList, err := extractFilenamesFromTar(filePath + ".tar") // file names are structured as name-version-subversionnumber
+	log.Printf("Parsed %v.", filePath+".tar")
 	if err != nil {
 		return err
 	}
 	if err := os.Remove(filePath + ".tar"); err != nil {
 		return err
 	}
+	log.Printf("Adding entries to db...")
+	var repoList []RepoPackage
 	for _, fileName := range fileList {
-		rpkg, err := buildRepoPkg(fileName, mirror.RepoName)
+		rpkg, err := buildRepoPkg(fileName, mirror.RepoName, prefix)
 		if err != nil {
 			// If a repo package has an invalid name
 			// e.g. is not a repo package, maybe it is a src package or whatever, we skip it
 			log.Printf("error: %v\n", err)
 			continue
 		}
-		prefetchDB.Save(rpkg)
+		repoList = append(repoList, rpkg)
 	}
+	prefetchDB.Save(&repoList)
+	log.Printf("Added entries to db.")
 	return nil
-
 }
 
 // download dbs from their URLs stored in the mirror_dbs table and load their content in the repo_packages table
@@ -166,9 +217,9 @@ func downloadAndLoadDbs() error {
 	return nil
 }
 
-func updateMirrorsDbs() {
-	createRepoTable()
-	if err := downloadAndLoadDbs(); err != nil {
-		log.Printf("An error occurred while downloading db files: %v", err)
+func updateMirrorsDbs() error {
+	if err := createRepoTable(); err != nil {
+		return err
 	}
+	return downloadAndLoadDbs()
 }

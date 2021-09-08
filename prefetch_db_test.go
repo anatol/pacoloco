@@ -210,13 +210,13 @@ func TestGetPkgsToUpdate(t *testing.T) {
 	updateDBDownloadedFile("foo", "webkit-2.3.1-1-x86_64.pkg.tar.zst")
 	updateDBDownloadedFile("foo", "webkit2-2.3.1-1-x86_64.pkg.tar.zst")
 	updateDBDownloadedFile("foo", "webkit3-2.4.1-1-x86_64.pkg.tar.zst")
-	repoPkg, err := buildRepoPkg("webkit-2.4.1-1-x86_64.pkg.tar.zst", "foo")
+	repoPkg, err := buildRepoPkg("webkit-2.4.1-1-x86_64.pkg.tar.zst", "foo", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	prefetchDB.Save(&repoPkg)
 	// same version, shouldn't be included
-	repoPkg, err = buildRepoPkg("webkit3-2.4.1-1-x86_64.pkg.tar.zst", "foo")
+	repoPkg, err = buildRepoPkg("webkit3-2.4.1-1-x86_64.pkg.tar.zst", "foo", "")
 	if err != nil {
 		t.Fatal(err)
 	}

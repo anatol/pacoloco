@@ -29,6 +29,11 @@ port: 9139
 repos:
     archlinux:
         url: http://mirrors.kernel.org/archlinux
+    example:
+        urls:
+           -  http://mirror1.example.org/archlinux
+           -  https://mirror.example.com/mirror/packages/archlinux/
+           -  http://mirror2.example.com/archlinux/test/
 `
 	config = parseConfig([]byte(c))
 	return tmpDir
