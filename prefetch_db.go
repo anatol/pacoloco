@@ -208,3 +208,7 @@ func getAllMirrorsDB() []MirrorDB {
 	prefetchDB.Find(&mirrorDBs)
 	return mirrorDBs
 }
+
+func deleteMirrorDBFromDB(m MirrorDB) {
+	prefetchDB.Model(&MirrorDB{}).Unscoped().Where("mirror_dbs.url = ? and mirror_dbs.repo_name = ?", m.URL, m.RepoName)
+}

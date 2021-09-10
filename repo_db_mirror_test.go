@@ -10,6 +10,7 @@ import (
 	"path"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 )
@@ -253,7 +254,7 @@ func TestExtractFilenamesFromTar(t *testing.T) {
 
 func TestGetPacolocoURL(t *testing.T) {
 	// create a package
-	got := getPacolocoURL(Package{PackageName: "webkit2gtk", RepoName: "testRepo", Version: "2.26.4-1", Arch: "x86_64"})
+	got := getPacolocoURL(Package{PackageName: "webkit2gtk", RepoName: "testRepo", Version: "2.26.4-1", Arch: "x86_64"}, "")
 	want := "/repo/testRepo/webkit2gtk-2.26.4-1-x86_64"
 	if got != want {
 		t.Errorf("Want %v, got %v", want, got)
@@ -261,29 +262,53 @@ func TestGetPacolocoURL(t *testing.T) {
 }
 
 func TestBuildRepoPkg(t *testing.T) {
-	got, err := buildRepoPkg("libstdc++5-3.3.6-7-x86_64.pkg.tar.zst", "testRepo")
+	got, err := buildRepoPkg("libstdc++5-3.3.6-7-x86_64.pkg.tar.zst", "testRepo", "community")
 	if err != nil {
 		log.Fatal(err)
 	}
-	want := RepoPackage{PackageName: "libstdc++5", RepoName: "testRepo", Version: "3.3.6-7", Arch: "x86_64", DownloadURL: "/repo/testRepo/libstdc++5-3.3.6-7-x86_64"}
+	want := RepoPackage{PackageName: "libstdc++5", RepoName: "testRepo", Version: "3.3.6-7", Arch: "x86_64", DownloadURL: "/repo/testRepo/community/libstdc++5-3.3.6-7-x86_64"}
 	if !cmp.Equal(got, want) {
 		t.Errorf("Got %v, want %v", got, want)
 	}
-	if _, err = buildRepoPkg("webkit2gtk-2.26.4-1-x86_6-4.pkg.tar.zst", "testRepo"); err == nil {
+	if _, err = buildRepoPkg("webkit2gtk-2.26.4-1-x86_6-4.pkg.tar.zst", "testRepo", ""); err == nil {
 		t.Errorf("Should have thrown an error cause the string is invalid")
 	}
 }
 
-/*
-func TestDownloadAndLoadDB(t *testing.T) {
-	// tested in prefetch integration tests
-
+func TestGetPrefixFromMirrorDB(t *testing.T) {
+	testSetupHelper(t)
+	setupPrefetch()
+	now := time.Now()
+	testMirror := MirrorDB{URL: "https://mirror.example.com/mirror/packages/archlinux//extra/os/x86_64/extra.db", RepoName: "example", LastTimeDownloaded: &now}
+	got, err := getPrefixFromMirrorDB(testMirror)
+	if err != nil {
+		t.Errorf("%v", err)
+	}
+	want := "/extra/os/x86_64/"
+	if !cmp.Equal(got, want) {
+		t.Errorf("Got %v, want %v", got, want)
+	}
+	testMirror = MirrorDB{URL: "https://mirror.example.com/mirror/packages/archlinux/extra//os/x86_64/extra.db", RepoName: "example", LastTimeDownloaded: &now}
+	got, err = getPrefixFromMirrorDB(testMirror)
+	if err != nil {
+		t.Errorf("%v", err)
+	}
+	want = "/extra//os/x86_64/"
+	if !cmp.Equal(got, want) {
+		t.Errorf("Got %v, want %v", got, want)
+	}
+	testMirror = MirrorDB{URL: "https://mirror.example.com/mirror/packages/archlinux/extra.db", RepoName: "example", LastTimeDownloaded: &now}
+	got, err = getPrefixFromMirrorDB(testMirror)
+	if err != nil {
+		t.Errorf("%v", err)
+	}
+	want = ""
+	if !cmp.Equal(got, want) {
+		t.Errorf("Got %v, want %v", got, want)
+	}
+	testMirror = MirrorDB{URL: "https://mirror.example.com/mirror/packagesarchlinux/extra.db", RepoName: "example", LastTimeDownloaded: &now}
+	_, err = getPrefixFromMirrorDB(testMirror)
+	if err == nil {
+		t.Errorf("Should have raised error")
+	}
 }
-
-func TestDownloadAndLoadDbs(t *testing.T) {
-	// tested in prefetch integration tests
-}
-
-func TestUpdateMirrorsDbs(t *testing.T) {
-	// tested in prefetch integration tests
-}*/

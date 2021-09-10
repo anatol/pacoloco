@@ -24,7 +24,7 @@ var pathRegex *regexp.Regexp
 var filenameRegex *regexp.Regexp   // to get the details of a package (arch, version etc)
 var filenameDBRegex *regexp.Regexp // to get the filename from the db file
 var urlRegex *regexp.Regexp        // to extract the relevant parts from an url to compose a pacoloco url
-
+var mirrorDBRegex *regexp.Regexp   // to extract the "path" field from a url
 var prefetchDB *gorm.DB
 
 // Accepted formats
@@ -39,14 +39,14 @@ func init() {
 	// source: https://archlinux.org/pacman/makepkg.conf.5.html PKGEXT section
 	allowedPackagesExtensions = []string{".pkg.tar.gz", ".pkg.tar.bz2", ".pkg.tar.xz", ".pkg.tar.zst", ".pkg.tar.lzo", ".pkg.tar.lrz", ".pkg.tar.lz4", ".pkg.tar.lz", ".pkg.tar.Z", ".pkg.tar"}
 
-	// Filename regex explanation (also here https://regex101.com/r/qB0fQ7/34 )
+	// Filename regex explanation (also here https://regex101.com/r/qB0fQ7/35 )
 	/*
 		The filename relevant matches are:
 		^([a-z0-9._+-]+)			a package filename must be a combination of lowercase letters,numbers,dots, underscores, plus symbols or dashes
 		-							separator
-		([a-z0-9A-Z:.]+-[0-9]+)		epoch/version. an epoch can be written as (whatever)-(sequence of numbers)
+		([a-z0-9A-Z:._+]+-[0-9]+)	epoch/version. an epoch can be written as (whatever)-(sequence of numbers)
 		-							separator
-		([a-zA-Z0-9._]+)			arch
+		([a-zA-Z0-9:._+]+)			arch
 		-							separator
 		(([.]...)$					file extension, explanation below
 
@@ -70,7 +70,7 @@ func init() {
 
 
 	*/
-	filenameRegex, err = regexp.Compile("^([a-z0-9._+-]+)-([a-z0-9A-Z:.]+-[0-9]+)-([a-zA-Z0-9._]+)(([.]pkg[.]tar(([.]gz)|([.]bz2)|([.]xz)|([.]zst)|([.]lzo)|([.]lrz)|([.]lz4)|([.]lz)|([.]Z))?)([.]sig)?)$")
+	filenameRegex, err = regexp.Compile("^([a-z0-9._+-]+)-([a-zA-Z0-9:._+]+-[0-9]+)-([a-zA-Z0-9:._+]+)(([.]pkg[.]tar(([.]gz)|([.]bz2)|([.]xz)|([.]zst)|([.]lzo)|([.]lrz)|([.]lz4)|([.]lz)|([.]Z))?)([.]sig)?)$")
 	if err != nil {
 		log.Fatal(err)
 	} // shouldn't happen
@@ -86,6 +86,12 @@ func init() {
 	// 	([^/]+)$"					group4 is the filename which has to be replaced
 
 	urlRegex, err = regexp.Compile("^([a-zA-Z0-9+_-]+://[^/]+)/(([^/]*/)+)([^/]+)$")
+	if err != nil {
+		log.Fatal(err)
+	} // shouldn't happen
+	// Starting from a string like "///extra/os/x86_64/extra.db" , it matches "///extra/os/x86_64/"
+	// More details here https://regex101.com/r/kMGOhq/1
+	mirrorDBRegex, err = regexp.Compile("^/*([^/]+/+)+")
 	if err != nil {
 		log.Fatal(err)
 	} // shouldn't happen
@@ -343,7 +349,7 @@ func downloadFile(url string, filePath string, ifModifiedSince time.Time) (serve
 		return false, nil
 	default:
 		// for most dbs signatures are optional, be quiet if the signature is not found
-		// quiet a1505e9c4863f3bb3883fe7f3ee7c41f8b865876:= resp.StatusCode == http.StatusNotFound && strings.HasSuffix(url, ".db.sig")
+		// quiet := resp.StatusCode == http.StatusNotFound && strings.HasSuffix(url, ".db.sig")
 		err = fmt.Errorf("unable to download url %s, status code is %d", url, resp.StatusCode)
 		return false, err
 	}
