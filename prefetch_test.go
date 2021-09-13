@@ -376,7 +376,9 @@ func TestCleanPrefetchDB(t *testing.T) {
 	oneMonthAgo := time.Now().AddDate(0, -1, 0) // more or less
 	// updated one month ago but downloaded now, should not be deleted
 	pkg.LastTimeRepoUpdated = &oneMonthAgo
-	prefetchDB.Save(pkg)
+	if db := prefetchDB.Save(pkg); db.Error != nil {
+		t.Error(db.Error)
+	}
 	cleanPrefetchDB()
 	// should delete nothing
 	latestPkgInDB := getPackage("webkit", "x86_64", "foo")
@@ -400,7 +402,9 @@ func TestCleanPrefetchDB(t *testing.T) {
 	// now it should be deleted, knowing that a package is dead (in this configuration) if older than 20 days
 
 	pkg.LastTimeDownloaded = &oneMonthAgo
-	prefetchDB.Save(pkg)
+	if db := prefetchDB.Save(pkg); db.Error != nil {
+		t.Error(db.Error)
+	}
 	cleanPrefetchDB()
 	latestPkgInDB = getPackage("webkit", "x86_64", "foo")
 	if latestPkgInDB.PackageName != "" && pkg.Arch != "" {

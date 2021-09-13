@@ -200,7 +200,9 @@ func addDBfileToDB(urlDB string, repoName string) (MirrorDB, error) {
 		return MirrorDB{}, fmt.Errorf("url '%v' is invalid, cannot save it for prefetching", urlDB)
 	}
 	mirror := MirrorDB{urlDB, repoName, &now}
-	prefetchDB.Save(&mirror)
+	if db := prefetchDB.Save(&mirror); db.Error != nil {
+		return MirrorDB{}, db.Error
+	}
 	return mirror, nil
 }
 func getAllMirrorsDB() []MirrorDB {

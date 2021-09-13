@@ -85,12 +85,16 @@ func updateDBDownloadedFile(repoName string, fileName string) {
 			var existentPkg Package
 			prefetchDB.First(&existentPkg, "packages.package_name = ? and packages.arch = ? AND packages.repo_name = ?", pkg.PackageName, pkg.Arch, pkg.RepoName)
 			if existentPkg.PackageName == "" {
-				prefetchDB.Save(&pkg)
+				if db := prefetchDB.Save(&pkg); db.Error != nil {
+					log.Printf("db error: %v\n", db.Error)
+				}
 			} else {
 				if existentPkg.Version == pkg.Version {
 					now := time.Now()
 					existentPkg.LastTimeDownloaded = &now
-					prefetchDB.Save(existentPkg)
+					if db := prefetchDB.Save(existentPkg); db.Error != nil {
+						log.Printf("db error: %v\n", db.Error)
+					}
 				} else {
 					// if on a repo there is a different version, we assume it is the most recent one.
 					// The one with the bigger version number may be wrong, assuming a corner case in which a downgrade have been done in the upstream mirror.
@@ -99,7 +103,9 @@ func updateDBDownloadedFile(repoName string, fileName string) {
 					// if two mirrors serve 2 different versions of the same package, this could be a issue (it won't cache the result).
 					// I hope not, cause it would be nonsensical. If it has some sense, mirror name should be added as a primary key too
 					purgePkgIfExists(&existentPkg)
-					prefetchDB.Save(pkg)
+					if db := prefetchDB.Save(pkg); db.Error != nil {
+						log.Printf("db error: %v\n", db.Error)
+					}
 				}
 			}
 		} else {
@@ -121,7 +127,9 @@ func updateDBPrefetchedFile(repoName string, fileName string) {
 			var existentPkg Package
 			prefetchDB.First(&existentPkg, "packages.package_name = ? and packages.arch = ? AND packages.repo_name = ?", pkg.PackageName, pkg.Arch, pkg.RepoName)
 			if existentPkg.PackageName == "" {
-				prefetchDB.Save(&pkg) // save it anyway
+				if db := prefetchDB.Save(&pkg); db.Error != nil {
+					log.Printf("db error: %v\n", db.Error)
+				} // save it anyway
 				if err := fmt.Errorf("warning: prefetched package wasn't on the db"); err != nil {
 					log.Printf("error: %v\n", err)
 					return
@@ -130,7 +138,9 @@ func updateDBPrefetchedFile(repoName string, fileName string) {
 				if existentPkg.Version == pkg.Version {
 					now := time.Now()
 					existentPkg.LastTimeRepoUpdated = &now
-					prefetchDB.Save(existentPkg)
+					if db := prefetchDB.Save(existentPkg); db.Error != nil {
+						log.Printf("db error: %v\n", db.Error)
+					}
 				} else {
 					// if on a repo there is a different version, we assume it is the most recent one.
 					// The one with the bigger version number may be wrong, assuming a corner case in which a downgrade have been done in the upstream mirror.
@@ -140,7 +150,9 @@ func updateDBPrefetchedFile(repoName string, fileName string) {
 					// pacoloco won't cache the result.
 					// I hope not, because it would be nonsensical. If it has some sense, mirror name should be added as a primary key too
 					purgePkgIfExists(&existentPkg)
-					prefetchDB.Save(pkg)
+					if db := prefetchDB.Save(pkg); db.Error != nil {
+						log.Printf("db error: %v\n", db.Error)
+					}
 				}
 			}
 		} else {

@@ -126,7 +126,9 @@ func TestGetAndDropUnusedPackages(t *testing.T) {
 	oneMonthAgo := time.Now().AddDate(0, -1, 0) // more or less
 	// updated one month ago but downloaded now, should not be deleted
 	pkg.LastTimeRepoUpdated = &oneMonthAgo
-	prefetchDB.Save(&pkg)
+	if db := prefetchDB.Save(&pkg); db.Error != nil {
+		t.Error(db.Error)
+	}
 	period := time.Duration(24 * time.Hour * 10)
 	getAndDropUnusedPackages(period)
 	// should delete nothing
@@ -138,7 +140,9 @@ func TestGetAndDropUnusedPackages(t *testing.T) {
 	now := time.Now()
 	pkg.LastTimeDownloaded = &oneMonthAgo
 	pkg.LastTimeRepoUpdated = &now
-	prefetchDB.Save(&pkg)
+	if db := prefetchDB.Save(&pkg); db.Error != nil {
+		t.Error(db.Error)
+	}
 	deletedPkgs := getAndDropUnusedPackages(period)
 	if len(deletedPkgs) == 0 {
 		t.Errorf("Package should have been deleted and returned")
@@ -157,7 +161,9 @@ func TestGetAndDropDeadPackages(t *testing.T) {
 	oneMonthAgo := time.Now().AddDate(0, -1, 0) // more or less
 	// updated one month ago but downloaded now, should not be deleted
 	pkg.LastTimeDownloaded = &oneMonthAgo
-	prefetchDB.Save(pkg)
+	if db := prefetchDB.Save(pkg); db.Error != nil {
+		t.Error(db.Error)
+	}
 	getAndDropDeadPackages(oneMonthAgo)
 	// should delete nothing
 	latestPkgInDB := getPackage("webkit", "x86_64", "foo")
@@ -166,7 +172,9 @@ func TestGetAndDropDeadPackages(t *testing.T) {
 	}
 	// now it should be deleted, knowing that a package is dead (in this configuration) if older than 20 days
 	pkg.LastTimeRepoUpdated = &oneMonthAgo
-	prefetchDB.Save(pkg)
+	if db := prefetchDB.Save(pkg); db.Error != nil {
+		t.Error(db.Error)
+	}
 	getAndDropDeadPackages(oneMonthAgo.AddDate(0, 0, 1))
 	latestPkgInDB = getPackage("webkit", "x86_64", "foo")
 	if latestPkgInDB.PackageName != "" && pkg.Arch != "" {
@@ -194,7 +202,9 @@ func TestDropUnusedDBFiles(t *testing.T) {
 	prefetchDB.Model(&MirrorDB{}).Where("mirror_dbs.url = ? and mirror_dbs.repo_name = ?", "http://example.com/valid//url/test.db", "foo").First(&mirr)
 	twoMonthsAgo := time.Now().AddDate(0, -2, 0)
 	mirr.LastTimeDownloaded = &twoMonthsAgo
-	prefetchDB.Save(&mirr)
+	if db := prefetchDB.Save(&mirr); db.Error != nil {
+		t.Error(db.Error)
+	}
 	dropUnusedDBFiles(oneMonthAgo)
 	dbs = getAllMirrorsDB()
 	if len(dbs) != 0 {
@@ -214,13 +224,17 @@ func TestGetPkgsToUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prefetchDB.Save(&repoPkg)
+	if db := prefetchDB.Save(&repoPkg); db.Error != nil {
+		t.Error(db.Error)
+	}
 	// same version, shouldn't be included
 	repoPkg, err = buildRepoPkg("webkit3-2.4.1-1-x86_64.pkg.tar.zst", "foo", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	prefetchDB.Save(&repoPkg)
+	if db := prefetchDB.Save(&repoPkg); db.Error != nil {
+		t.Error(db.Error)
+	}
 	got := getPkgsToUpdate()
 	want := []PkgToUpdate{PkgToUpdate{PackageName: "webkit", RepoName: "foo", Arch: "x86_64", DownloadURL: "/repo/foo/webkit-2.4.1-1-x86_64"}}
 	if !cmp.Equal(got, want) {
