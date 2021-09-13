@@ -128,10 +128,10 @@ func getPrefixFromMirrorDB(mirror MirrorDB) (string, error) {
 			}
 
 		}
-		return "", fmt.Errorf("Error: Mirror link %v does not exist in repo %v", mirror.URL, mirror.RepoName)
+		return "", fmt.Errorf("error: Mirror link %v does not exist in repo %v", mirror.URL, mirror.RepoName)
 	} else {
 		// This mirror link is a residual of an old config
-		return "", fmt.Errorf("Error: Mirror link %v is associated with repo %v which does not exist in config.", mirror.URL, mirror.RepoName)
+		return "", fmt.Errorf("error: Mirror link %v is associated with repo %v which does not exist in config", mirror.URL, mirror.RepoName)
 	}
 }
 
@@ -192,7 +192,30 @@ func downloadAndLoadDB(mirror MirrorDB) error {
 		}
 		repoList = append(repoList, rpkg)
 	}
-	prefetchDB.Save(&repoList)
+	if db := prefetchDB.Save(&repoList); db.Error != nil {
+		if !strings.Contains(fmt.Sprint(db.Error), "too many SQL variables") {
+			return db.Error
+		}
+		// Reduce the number of inserts each time
+		// It is not very clear which parameter did cause "too many SQL variables". Useful reference: https://www.sqlite.org/limits.html
+		maxBatchSize := 2000
+		numOfPkgs := len(repoList)
+		for i := 0; i < numOfPkgs; i += maxBatchSize {
+			ends := i + maxBatchSize
+			if ends > numOfPkgs {
+				ends = numOfPkgs
+			}
+			newList := repoList[i:ends]
+			if db := prefetchDB.Save(&newList); db.Error != nil {
+				if strings.Contains(fmt.Sprint(db.Error), "too many SQL variables") {
+					return fmt.Errorf("db error: Batch size is too big, change it in the config. This is a bug")
+				} else {
+					return db.Error
+				}
+			}
+		}
+
+	}
 	log.Printf("Added entries to db.")
 	return nil
 }
