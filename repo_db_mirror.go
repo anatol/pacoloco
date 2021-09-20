@@ -104,35 +104,36 @@ func buildRepoPkg(fileName string, repoName string, prefix string) (RepoPackage,
 // https://mirror.example.com/mirror/packages/archlinux//extra/os/x86_64/extra.db
 // it extracts /extra/os/x86_64
 func getPrefixFromMirrorDB(mirror MirrorDB) (string, error) {
-	if repoLinks, exists := config.Repos[mirror.RepoName]; exists {
-		var URLs []string
-		if repoLinks.URL != "" {
-			URLs = append(URLs, repoLinks.URL)
-		} else {
-			URLs = repoLinks.URLs
-		}
-		for _, URL := range URLs {
-			splittedURL := strings.Split(mirror.URL, URL)
-			if len(splittedURL) <= 1 {
-				continue // this is not the proper url
-			}
-			matches := mirrorDBRegex.FindStringSubmatch(splittedURL[1])
-			if len(matches) < 1 {
-				// It means that the path is empty, e.g. //extra.db or extra.db
-				return "", nil
-			}
-			if !strings.HasPrefix(matches[0], "/") {
-				return "/" + matches[0], nil
-			} else {
-				return matches[0], nil
-			}
-
-		}
-		return "", fmt.Errorf("error: Mirror link %v does not exist in repo %v", mirror.URL, mirror.RepoName)
-	} else {
+	repoLinks, exists := config.Repos[mirror.RepoName]
+	if !exists {
 		// This mirror link is a residual of an old config
 		return "", fmt.Errorf("error: Mirror link %v is associated with repo %v which does not exist in config", mirror.URL, mirror.RepoName)
 	}
+
+	var URLs []string
+	if repoLinks.URL != "" {
+		URLs = append(URLs, repoLinks.URL)
+	} else {
+		URLs = repoLinks.URLs
+	}
+	for _, URL := range URLs {
+		splittedURL := strings.Split(mirror.URL, URL)
+		if len(splittedURL) <= 1 {
+			continue // this is not the proper url
+		}
+		matches := mirrorDBRegex.FindStringSubmatch(splittedURL[1])
+		if len(matches) < 1 {
+			// It means that the path is empty, e.g. //extra.db or extra.db
+			return "", nil
+		}
+		if !strings.HasPrefix(matches[0], "/") {
+			return "/" + matches[0], nil
+		} else {
+			return matches[0], nil
+		}
+
+	}
+	return "", fmt.Errorf("error: Mirror link %v does not exist in repo %v", mirror.URL, mirror.RepoName)
 }
 
 // Downloads the db from the mirror and adds RepoPackages
