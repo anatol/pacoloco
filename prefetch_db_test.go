@@ -241,3 +241,32 @@ func TestGetPkgsToUpdate(t *testing.T) {
 		t.Errorf("\ngot  %v\nwant %v", got, want)
 	}
 }
+
+func TestGetPackageFromFilenameAndRepo(t *testing.T) {
+	testSetupHelper(t)
+	setupPrefetch()
+	got, err := getPackageFromFilenameAndRepo("foo", "webkit-2.3.1-1-x86_64.pkg.tar.zst")
+	want := Package{PackageName: "webkit", Version: "2.3.1-1", Arch: "x86_64", RepoName: "foo"}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cmp.Equal(got, want, cmpopts.IgnoreFields(Package{}, "LastTimeDownloaded", "LastTimeRepoUpdated")) {
+		t.Errorf("\ngot  %v\nwant %v", got, want)
+	}
+	_, err = getPackageFromFilenameAndRepo("foo", "webkit2-2.3\nhttp://www.example.org\n.1-1-x86_64.pkg.tar.zst")
+	if err == nil {
+		t.Fatal(err)
+	}
+	_, err = getPackageFromFilenameAndRepo("foo", "android-sdk-26.1.1-1/1-x86_64.pkg.tar.xz")
+	if err == nil {
+		t.Fatal(err)
+	}
+	got, err = getPackageFromFilenameAndRepo("t", "android-sdk-26.1.1-1.1-x86_64.pkg.tar.xz")
+	want = Package{PackageName: "android-sdk", Version: "26.1.1-1.1", Arch: "x86_64", RepoName: "t"}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cmp.Equal(got, want, cmpopts.IgnoreFields(Package{}, "LastTimeDownloaded", "LastTimeRepoUpdated")) {
+		t.Errorf("\ngot  %v\nwant %v", got, want)
+	}
+}

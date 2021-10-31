@@ -39,12 +39,12 @@ func init() {
 	// source: https://archlinux.org/pacman/makepkg.conf.5.html PKGEXT section
 	allowedPackagesExtensions = []string{".pkg.tar.gz", ".pkg.tar.bz2", ".pkg.tar.xz", ".pkg.tar.zst", ".pkg.tar.lzo", ".pkg.tar.lrz", ".pkg.tar.lz4", ".pkg.tar.lz", ".pkg.tar.Z", ".pkg.tar"}
 
-	// Filename regex explanation (also here https://regex101.com/r/qB0fQ7/35 )
+	// Filename regex explanation (also here https://regex101.com/r/qB0fQ7/36 )
 	/*
 		The filename relevant matches are:
 		^([a-z0-9._+-]+)			a package filename must be a combination of lowercase letters,numbers,dots, underscores, plus symbols or dashes
 		-							separator
-		([a-z0-9A-Z:._+]+-[0-9]+)	epoch/version. an epoch can be written as (whatever)-(sequence of numbers)
+		([a-z0-9A-Z:._+]+-[0-9.]+)	epoch/version. an epoch can be written as (whatever)-(sequence of numbers with possibly dots)
 		-							separator
 		([a-zA-Z0-9:._+]+)			arch
 		-							separator
@@ -70,7 +70,7 @@ func init() {
 
 
 	*/
-	filenameRegex, err = regexp.Compile("^([a-z0-9._+-]+)-([a-zA-Z0-9:._+]+-[0-9]+)-([a-zA-Z0-9:._+]+)(([.]pkg[.]tar(([.]gz)|([.]bz2)|([.]xz)|([.]zst)|([.]lzo)|([.]lrz)|([.]lz4)|([.]lz)|([.]Z))?)([.]sig)?)$")
+	filenameRegex, err = regexp.Compile("^([a-z0-9._+-]+)-([a-zA-Z0-9:._+]+-[0-9.]+)-([a-zA-Z0-9:._+]+)(([.]pkg[.]tar(([.]gz)|([.]bz2)|([.]xz)|([.]zst)|([.]lzo)|([.]lrz)|([.]lz4)|([.]lz)|([.]Z))?)([.]sig)?)$")
 	if err != nil {
 		log.Fatal(err)
 	} // shouldn't happen
