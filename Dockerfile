@@ -4,7 +4,7 @@ WORKDIR /build
 
 COPY . .
 
-RUN CGO_ENABLED=0 go build -ldflags="-s -w"
+RUN go build -ldflags="-s -w"
 
 FROM scratch
 
