@@ -1,12 +1,14 @@
-FROM golang:latest as build
+FROM golang:alpine3.13 as build
+
+RUN apk add gcc libc-dev
 
 WORKDIR /build
 
 COPY . .
 
-RUN CGO_ENABLED=0 go build -ldflags="-s -w"
+RUN go build -ldflags="-s -w"
 
-FROM scratch
+FROM alpine:3.13
 
 WORKDIR /pacoloco
 
