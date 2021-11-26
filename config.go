@@ -33,6 +33,7 @@ type Config struct {
 	PurgeFilesAfter int             `yaml:"purge_files_after"`
 	DownloadTimeout int             `yaml:"download_timeout"`
 	Prefetch        *RefreshPeriod  `yaml:"prefetch"`
+	HttpProxy       string          `yaml:"http_proxy"`
 }
 
 var config *Config

@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -116,6 +117,14 @@ func main() {
 	if config.PurgeFilesAfter != 0 {
 		cleanupTicker := setupPurgeStaleFilesRoutine()
 		defer cleanupTicker.Stop()
+	}
+
+	if config.HttpProxy != "" {
+		proxyUrl, err := url.Parse(config.HttpProxy)
+		if err != nil {
+			log.Fatal(err)
+		}
+		http.DefaultTransport = &http.Transport{Proxy: http.ProxyURL(proxyUrl)}
 	}
 
 	listenAddr := fmt.Sprintf(":%d", config.Port)
