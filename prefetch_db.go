@@ -35,8 +35,8 @@ func getAllPackagePaths(pkg Package) []string {
 	return pkgPaths
 }
 
-// MirrorDB is a struct which describes a ".db" link from a mirror.
-// It is quite hard to know where db files are, so i'll store them when they are requested
+// MirrorDB is a struct which stores all the relevant informations about a requested db file from a client.
+// Pacoloco uses this information to replicate the same request when it has to prefetch updated DB files from upstream mirrors
 // I assume the other files to download are on the same path of the DB
 type MirrorDB struct {
 	URL                string     `gorm:"primaryKey;not null"`
@@ -129,9 +129,14 @@ func getAndDropUnusedPackages(period time.Duration) []Package {
 	return unusedPkgs
 }
 
-// Returns unused db files and removes them from the db
+// Returns unused db files or not existing repos and removes them from the db
 func dropUnusedDBFiles(olderThan time.Time) {
 	prefetchDB.Model(&MirrorDB{}).Unscoped().Where("mirror_dbs.last_time_downloaded < ?", olderThan).Delete(&MirrorDB{})
+	repoNames := make([]string, 0, len(config.Repos))
+	for key := range config.Repos {
+		repoNames = append(repoNames, key)
+	}
+	prefetchDB.Model(&MirrorDB{}).Unscoped().Where("mirror_dbs.repo_name NOT IN ?", repoNames).Delete(&MirrorDB{})
 }
 
 // Returns dead packages and removes them from the db
@@ -199,13 +204,14 @@ func getPkgsToUpdate() []PkgToUpdate {
 	return pkgs
 }
 
-// add a complete url of a DB in a db. This urls are used to download afterwards the db to know which packages should be prefetched.
-func addDBfileToDB(urlDB string, repoName string) (MirrorDB, error) {
+// add a pacoloco url of a DB in a db. This urls are used to download afterwards the db to know which packages should be prefetched.
+func updateDBRequestedDB(repoName string, path_ string, filename string) (MirrorDB, error) {
 	now := time.Now()
 	if prefetchDB == nil {
 		log.Fatalf("prefetchDB is uninitialized")
 	}
-	matches := urlRegex.FindStringSubmatch(urlDB)
+	urlDB := path.Join("/repo/", repoName, path_, filename)
+	matches := pathRegex.FindStringSubmatch(urlDB)
 	if len(matches) == 0 {
 		return MirrorDB{}, fmt.Errorf("url '%v' is invalid, cannot save it for prefetching", urlDB)
 	}
@@ -222,5 +228,5 @@ func getAllMirrorsDB() []MirrorDB {
 }
 
 func deleteMirrorDBFromDB(m MirrorDB) {
-	prefetchDB.Model(&MirrorDB{}).Unscoped().Where("mirror_dbs.url = ? and mirror_dbs.repo_name = ?", m.URL, m.RepoName)
+	prefetchDB.Model(&MirrorDB{}).Unscoped().Where("mirror_dbs.url = ? and mirror_dbs.repo_name = ?", m.URL, m.RepoName).Delete(&MirrorDB{})
 }

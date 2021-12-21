@@ -11,7 +11,6 @@ import (
 	"path"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/go-cmp/cmp"
 )
@@ -312,43 +311,5 @@ func TestBuildMirrorPkg(t *testing.T) {
 	}
 	if _, err = buildMirrorPkg("webkit2gtk-2.26.4-1-x86_6-4.pkg.tar.zst", "testRepo", ""); err == nil {
 		t.Errorf("Should have thrown an error cause the string is invalid")
-	}
-}
-
-func TestGetPrefixFromMirrorDB(t *testing.T) {
-	testSetupHelper(t)
-	setupPrefetch()
-	now := time.Now()
-	testMirror := MirrorDB{URL: "https://mirror.example.com/mirror/packages/archlinux//extra/os/x86_64/extra.db", RepoName: "example", LastTimeDownloaded: &now}
-	got, err := getPrefixFromMirrorDB(testMirror)
-	if err != nil {
-		t.Errorf("%v", err)
-	}
-	want := "/extra/os/x86_64/"
-	if !cmp.Equal(got, want) {
-		t.Errorf("Got %v, want %v", got, want)
-	}
-	testMirror = MirrorDB{URL: "https://mirror.example.com/mirror/packages/archlinux/extra//os/x86_64/extra.db", RepoName: "example", LastTimeDownloaded: &now}
-	got, err = getPrefixFromMirrorDB(testMirror)
-	if err != nil {
-		t.Errorf("%v", err)
-	}
-	want = "/extra//os/x86_64/"
-	if !cmp.Equal(got, want) {
-		t.Errorf("Got %v, want %v", got, want)
-	}
-	testMirror = MirrorDB{URL: "https://mirror.example.com/mirror/packages/archlinux/extra.db", RepoName: "example", LastTimeDownloaded: &now}
-	got, err = getPrefixFromMirrorDB(testMirror)
-	if err != nil {
-		t.Errorf("%v", err)
-	}
-	want = ""
-	if !cmp.Equal(got, want) {
-		t.Errorf("Got %v, want %v", got, want)
-	}
-	testMirror = MirrorDB{URL: "https://mirror.example.com/mirror/packagesarchlinux/extra.db", RepoName: "example", LastTimeDownloaded: &now}
-	_, err = getPrefixFromMirrorDB(testMirror)
-	if err == nil {
-		t.Errorf("Should have raised error")
 	}
 }

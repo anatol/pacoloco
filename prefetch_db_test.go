@@ -187,11 +187,13 @@ func TestDropUnusedDBFiles(t *testing.T) {
 	testSetupHelper(t)
 	setupPrefetch()
 	oneMonthAgo := time.Now().AddDate(0, -1, 0)
-	if _, err := addDBfileToDB("test.db", "foo"); err == nil {
-		t.Errorf("Should have raised an error cause url is invalid")
+	// must be dropped because there is no repo called foo in testSetupHelper
+	if _, err := updateDBRequestedDB("foo", "/url/", "test2.db"); err != nil {
+		t.Error(err)
 	}
-	if _, err := addDBfileToDB("http://example.com/valid//url/test.db", "foo"); err != nil {
-		t.Errorf("Should have raised no error but got error %v", err)
+	// must not be dropped because there is a repo called example in testSetupHelper
+	if _, err := updateDBRequestedDB("example", "/url/", "test.db"); err != nil {
+		t.Error(err)
 	}
 	dropUnusedDBFiles(oneMonthAgo)
 	dbs := getAllMirrorsDB()
@@ -199,7 +201,11 @@ func TestDropUnusedDBFiles(t *testing.T) {
 		t.Errorf("The db should contain %d entries, but it contains %d", 1, len(dbs))
 	}
 	var mirr MirrorDB
-	prefetchDB.Model(&MirrorDB{}).Where("mirror_dbs.url = ? and mirror_dbs.repo_name = ?", "http://example.com/valid//url/test.db", "foo").First(&mirr)
+	prefetchDB.Model(&MirrorDB{}).Where("mirror_dbs.url = ? and mirror_dbs.repo_name = ?", "/repo/example/url/test.db", "example").First(&mirr)
+	matches := pathRegex.FindStringSubmatch(mirr.URL)
+	if len(matches) == 0 {
+		t.Errorf("It should be a proper pacoloco path url")
+	}
 	twoMonthsAgo := time.Now().AddDate(0, -2, 0)
 	mirr.LastTimeDownloaded = &twoMonthsAgo
 	if db := prefetchDB.Save(&mirr); db.Error != nil {

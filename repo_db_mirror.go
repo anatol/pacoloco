@@ -11,7 +11,6 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 // Uncompresses a gzip file
@@ -84,13 +83,13 @@ func extractFilenamesFromTar(filePath string) ([]string, error) {
 }
 
 // This function returns a url which should download the exactly identical pkg when sent to pacoloco except for the file extension
-func getPacolocoURL(pkg Package, prefix string) string {
-	return strings.ReplaceAll(("/repo/" + pkg.RepoName + "/" + prefix + "/" + pkg.PackageName + "-" + pkg.Version + "-" + pkg.Arch), "//", "/")
+func getPacolocoURL(pkg Package, prefixPath string) string {
+	return strings.ReplaceAll(("/repo/" + pkg.RepoName + "/" + prefixPath + "/" + pkg.PackageName + "-" + pkg.Version + "-" + pkg.Arch), "//", "/")
 }
 
 // Builds a mirror package
 // It requires the prefix, which is the relative path in which the db is contained
-func buildMirrorPkg(fileName string, repoName string, prefix string) (MirrorPackage, error) {
+func buildMirrorPkg(fileName string, repoName string, prefixPath string) (MirrorPackage, error) {
 	matches := filenameRegex.FindStringSubmatch(fileName)
 	if len(matches) >= 7 {
 		packageName := matches[1]
@@ -98,61 +97,14 @@ func buildMirrorPkg(fileName string, repoName string, prefix string) (MirrorPack
 		arch := matches[3]
 		ext := matches[5]
 		pkg := Package{PackageName: packageName, Version: version, Arch: arch, RepoName: repoName}
-		pacolocoURL := getPacolocoURL(pkg, prefix)
+		pacolocoURL := getPacolocoURL(pkg, prefixPath)
 		return MirrorPackage{PackageName: packageName, Version: version, Arch: arch, DownloadURL: pacolocoURL, RepoName: repoName, FileExt: ext}, nil
 	}
 	return MirrorPackage{}, fmt.Errorf("filename %v does not match regex, matches length is %d", fileName, len(matches))
 }
 
-// Returns the "path" field from a mirror url, e.g. from
-// https://mirror.example.com/mirror/packages/archlinux//extra/os/x86_64/extra.db
-// it extracts /extra/os/x86_64
-func getPrefixFromMirrorDB(mirror MirrorDB) (string, error) {
-	repoLinks, exists := config.Repos[mirror.RepoName]
-	if !exists {
-		// This mirror link is a residual of an old config
-		return "", fmt.Errorf("error: Mirror link %v is associated with repo %v which does not exist in config", mirror.URL, mirror.RepoName)
-	}
-
-	var URLs []string
-	if repoLinks.URL != "" {
-		URLs = append(URLs, repoLinks.URL)
-	} else {
-		URLs = repoLinks.URLs
-	}
-	for _, URL := range URLs {
-		splittedURL := strings.Split(mirror.URL, URL)
-		if len(splittedURL) <= 1 {
-			continue // this is not the proper url
-		}
-		matches := mirrorDBRegex.FindStringSubmatch(splittedURL[1])
-		if len(matches) < 1 {
-			// It means that the path is empty, e.g. //extra.db or extra.db
-			return "", nil
-		}
-		if !strings.HasPrefix(matches[0], "/") {
-			return "/" + matches[0], nil
-		} else {
-			return matches[0], nil
-		}
-
-	}
-	return "", fmt.Errorf("error: Mirror link %v does not exist in repo %v", mirror.URL, mirror.RepoName)
-}
-
 // Downloads the db from the mirror and adds MirrorPackages
 func downloadAndParseDb(mirror MirrorDB) error {
-	matches := urlRegex.FindStringSubmatch(mirror.URL)
-	if len(matches) == 0 {
-		return fmt.Errorf("url '%v' is invalid, does not match path regex", mirror.URL)
-	}
-	prefix, err := getPrefixFromMirrorDB(mirror)
-	if err != nil {
-		// If a mirror is invalid, don't download & load it
-		return err
-	}
-
-	fileName := matches[4]
 	// create directory if it does not exist
 	tmpDir := path.Join(config.CacheDir, "tmp-db")
 	if _, err := os.Stat(tmpDir); os.IsNotExist(err) {
@@ -160,11 +112,14 @@ func downloadAndParseDb(mirror MirrorDB) error {
 			return err
 		}
 	}
-
-	filePath := filepath.Join(config.CacheDir, "tmp-db", fileName)
-	ifModifiedSince := time.Time{}
+	matches := pathRegex.FindStringSubmatch(mirror.URL)
+	if len(matches) == 0 {
+		return fmt.Errorf("url '%v' is invalid, does not match path regex", mirror.URL)
+	}
+	fileName := matches[3]
+	filePath := filepath.Join(tmpDir, fileName)
 	// download the db file
-	if _, err := downloadFile(mirror.URL, filePath, ifModifiedSince); err != nil {
+	if err := prefetchRequest(mirror.URL, tmpDir); err != nil {
 		return err
 	}
 	log.Printf("Extracting %v...", filePath)
@@ -188,7 +143,7 @@ func downloadAndParseDb(mirror MirrorDB) error {
 	log.Printf("Adding entries to db...")
 	var repoList []MirrorPackage
 	for _, fileName := range fileList {
-		rpkg, err := buildMirrorPkg(fileName, mirror.RepoName, prefix)
+		rpkg, err := buildMirrorPkg(fileName, mirror.RepoName, matches[2])
 		if err != nil {
 			// If a repo package has an invalid name
 			// e.g. is not a repo package, maybe it is a src package or whatever, we skip it

@@ -48,14 +48,14 @@ func TestPacolocoPrefetchIntegration(t *testing.T) {
 }
 
 func testPrefetchInvalidURL(t *testing.T) {
-	if err := prefetchRequest("/foo"); err == nil {
+	if err := prefetchRequest("/foo", ""); err == nil {
 		t.Error("Error expected")
 	}
 }
 
 func testPrefetchRequestNonExistingDb(t *testing.T) {
 	// Requesting non-existing repo
-	if err := prefetchRequest("/repo/test/test.db"); err == nil {
+	if err := prefetchRequest("/repo/test/test.db", ""); err == nil {
 		t.Error("Error expected")
 	}
 
@@ -70,7 +70,7 @@ func testPrefetchRequestExistingRepo(t *testing.T) {
 	config.Repos["repo1"] = Repo{}
 	defer delete(config.Repos, "repo1")
 
-	if err := prefetchRequest("/repo/repo1/test.db"); err == nil {
+	if err := prefetchRequest("/repo/repo1/test.db", ""); err == nil {
 		t.Error("Error expected")
 	}
 
@@ -101,7 +101,7 @@ func testPrefetchRequestPackageFile(t *testing.T) {
 	pkgModTime := time.Now().Add(-time.Hour)
 	os.Chtimes(pkgAtMirror, pkgModTime, pkgModTime)
 
-	err := prefetchRequest("/repo/repo3/test-1-1-any.pkg.tar.zst")
+	err := prefetchRequest("/repo/repo3/test-1-1-any.pkg.tar.zst", "")
 
 	defer os.RemoveAll(path.Join(testPacolocoDir, "pkgs", "repo3")) // remove cached content
 
@@ -125,7 +125,7 @@ func testPrefetchRequestPackageFile(t *testing.T) {
 	newDbModTime := time.Now()
 	os.Chtimes(pkgAtMirror, newDbModTime, newDbModTime)
 
-	err = prefetchRequest("/repo/repo3/test-1-1-any.pkg.tar.zst")
+	err = prefetchRequest("/repo/repo3/test-1-1-any.pkg.tar.zst", "")
 
 	if err != nil {
 		t.Errorf("Expected success, got %v", err)
@@ -157,7 +157,7 @@ func testPrefetchFailover(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := prefetchRequest("/repo/failover/test-1-1-any.pkg.tar.zst")
+	err := prefetchRequest("/repo/failover/test-1-1-any.pkg.tar.zst", "")
 
 	defer os.RemoveAll(path.Join(testPacolocoDir, "pkgs", "failover")) // remove cached content
 
@@ -187,7 +187,7 @@ func testPrefetchRealDB(t *testing.T) {
 
 	dbAtMirror := path.Join(mirrorDir, "mirror2", "test.db")
 	createDbTarball(dbAtMirror, getTestTarDB())
-	mirror, err := addDBfileToDB(config.Repos["repo2"].URL+"/test.db", "repo2")
+	mirror, err := updateDBRequestedDB("repo2", "", "/test.db")
 	if err != nil {
 		t.Errorf("This shouldn't fail. Error: %v", err)
 	}
@@ -219,7 +219,7 @@ func testPrefetchRequestExistingRepoWithDb(t *testing.T) {
 	dbModTime := time.Now().Add(-time.Hour)
 	os.Chtimes(dbAtMirror, dbModTime, dbModTime)
 
-	err := prefetchRequest("/repo/repo2/test.db")
+	err := prefetchRequest("/repo/repo2/test.db", "")
 
 	if err != nil {
 		t.Errorf("Expected success, got %v", err)
@@ -250,7 +250,7 @@ func testPrefetchRequestExistingRepoWithDb(t *testing.T) {
 	newDbModTime := time.Now()
 	os.Chtimes(dbAtMirror, newDbModTime, newDbModTime)
 
-	prefetchRequest("/repo/repo2/test.db")
+	prefetchRequest("/repo/repo2/test.db", "")
 	if err != nil {
 		t.Errorf("Expected success, got %v", err)
 	}
@@ -281,7 +281,7 @@ func testIntegrationPrefetchAllPkgs(t *testing.T) {
 	dbAtMirror := path.Join(mirrorDir, "mirror3", "test.db")
 	createDbTarball(dbAtMirror, getTestTarDB())
 	// fake a request to the db
-	if _, err := addDBfileToDB(config.Repos["repo3"].URL+"/test.db", "repo3"); err != nil {
+	if _, err := updateDBRequestedDB("repo3", "", "/test.db"); err != nil {
 		t.Errorf("Should not generate errors, but got %v", err)
 	}
 	// now add a fake older version of a package which is in the db
