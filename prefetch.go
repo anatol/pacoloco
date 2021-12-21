@@ -196,26 +196,12 @@ func cleanPrefetchDB() {
 		for _, pkgToDel := range deadPkgs {
 			purgePkgIfExists(&pkgToDel)
 		}
-		// delete mirror links which does not exist on the config file
+		// delete mirror links which does not exist on the config file or are invalid
 		mirrors := getAllMirrorsDB()
 		for _, mirror := range mirrors {
-			if repoLinks, exists := config.Repos[mirror.RepoName]; exists {
-				var URLs []string
-				if repoLinks.URL != "" {
-					URLs = append(URLs, repoLinks.URL)
-				} else {
-					URLs = repoLinks.URLs
-				}
-				// compare the mirror URL with the URLs in the config file
-				found := false
-				for _, URL := range URLs {
-					if strings.Contains(mirror.URL, URL) {
-						found = true
-						break
-					}
-				}
-				if !found {
-					log.Printf("Deleting %v, mirror not found on config file", mirror.URL)
+			if _, exists := config.Repos[mirror.RepoName]; exists {
+				if strings.Index(mirror.URL, "/repo/") != 0 {
+					log.Printf("warning: deleting %v link due to migrating to a newer version of pacoloco. Simply do 'pacman -Sy' on repo %v to fix the prefetching.", mirror.URL, mirror.RepoName)
 					deleteMirrorDBFromDB(mirror)
 				}
 
@@ -244,7 +230,7 @@ func prefetchAllPkgs() {
 		urls := getPkgToUpdateDownloadURLs(p)
 		var failed []string
 		for _, url := range urls {
-			if err := prefetchRequest(url); err == nil {
+			if err := prefetchRequest(url, ""); err == nil {
 				purgePkgIfExists(&pkg) // delete the old package
 				if strings.HasSuffix(url, ".sig") {
 					log.Printf("Successfully prefetched %v-%v signature\n", p.PackageName, p.Arch)
