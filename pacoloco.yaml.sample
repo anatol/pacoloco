@@ -7,6 +7,8 @@ repos:
     urls:
       - http://mirror.lty.me/archlinux
       - http://mirrors.kernel.org/archlinux
+  archlinux-reflector:
+    mirrorlist: /etc/pacman.d/mirrorlist # Be careful! Check that pacoloco URL is NOT included in that file!
   quarry:
     url: http://pkgbuild.com/~anatolik/quarry/x86_64
   sublime:

@@ -24,9 +24,10 @@ var configFile = flag.String("config", "/etc/pacoloco.yaml", "Path to config fil
 var pathRegex *regexp.Regexp
 var filenameRegex *regexp.Regexp   // to get the details of a package (arch, version etc)
 var filenameDBRegex *regexp.Regexp // to get the filename from the db file
-var urlRegex *regexp.Regexp        // to extract the relevant parts from an url to compose a pacoloco url
-var mirrorDBRegex *regexp.Regexp   // to extract the "path" field from a url
+var mirrorlistRegex *regexp.Regexp // to extract the url from a mirrorlist file
 var prefetchDB *gorm.DB
+var lastMirrorlistCheck map[string]time.Time  // use the file path as a key to get when it had been checked for modifications
+var lastModificationTime map[string]time.Time // use the file path as a key to get the last modification time known
 
 // Accepted formats
 var allowedPackagesExtensions []string
@@ -79,23 +80,19 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	} // shouldn't happen
-	/*
-		Analysis of the regex:*/
-	// 	"^([a-zA-Z0-9+_-]+://[^/]+)	captures httpwhatever://baseurl.tld, which has to be discarded
-	// 	/(([^/]*/)+)				captures in group 2 the whole set of word/another/one/etc/, discarding the leading /
-	// 								group3 is useless
-	// 	([^/]+)$"					group4 is the filename which has to be replaced
 
-	urlRegex, err = regexp.Compile("^([a-zA-Z0-9+_-]+://[^/]+)/(([^/]*/)+)([^/]+)$")
+	//	Analysis of the mirrorlistRegex regex (also here https://regex101.com/r/1oEit0/1):
+	//  ^\s*Server\s*=\s*						Starts with `Server=` keyword, with optional spaces before and after `Server` and `=`
+	//  ([^\s$]+)(\$[^\s]+)						Non white spaces and not $ characters composes the url, which must end with a $ string (e.g. `$repo/os/$arch`)
+	//  [\s]*									Optional ending whitespaces
+	//  (#.*)?									Optional comment starting with #
+
+	mirrorlistRegex, err = regexp.Compile(`^\s*Server\s*=\s*([^\s$]+)(\$[^\s]+)[\s]*(#.*)?$`)
 	if err != nil {
 		log.Fatal(err)
 	} // shouldn't happen
-	// Starting from a string like "///extra/os/x86_64/extra.db" , it matches "///extra/os/x86_64/"
-	// More details here https://regex101.com/r/kMGOhq/1
-	mirrorDBRegex, err = regexp.Compile("^/*([^/]+/+)+")
-	if err != nil {
-		log.Fatal(err)
-	} // shouldn't happen
+	lastMirrorlistCheck = make(map[string]time.Time)
+	lastModificationTime = make(map[string]time.Time)
 }
 
 func main() {
@@ -108,6 +105,7 @@ func main() {
 		log.Fatal(err)
 	}
 	config = parseConfig(yaml)
+	updateMirrorlists()
 	if config.Prefetch != nil {
 		prefetchTicker := setupPrefetchTicker()
 		defer prefetchTicker.Stop()
@@ -242,7 +240,9 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 	repoName := matches[1]
 	path := matches[2]
 	fileName := matches[3]
-
+	if err := checkAndUpdateMirrorlistRepo(repoName); err != nil { // Check if the relevant mirrorlist is up to date. If not, update it
+		return err
+	}
 	repo, ok := config.Repos[repoName]
 	if !ok {
 		return fmt.Errorf("cannot find repo %s in the config file", repoName)

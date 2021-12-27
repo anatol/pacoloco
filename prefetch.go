@@ -12,7 +12,7 @@ import (
 )
 
 // Gets a duration from a cron string
-func getPrefetchDuration(cronStr string, from time.Time) (time.Duration, error) {
+func getCronDuration(cronStr string, from time.Time) (time.Duration, error) {
 	cron, err := cronexpr.Parse(cronStr)
 	if err != nil {
 		return time.Duration(0), err // shouldn't happen cause it is being checked on creation
@@ -28,7 +28,7 @@ func getPrefetchDuration(cronStr string, from time.Time) (time.Duration, error) 
 // Setups the prefetching ticker
 func setupPrefetchTicker() *time.Ticker {
 	if config.Prefetch != nil {
-		duration, err := getPrefetchDuration(config.Prefetch.Cron, time.Now())
+		duration, err := getCronDuration(config.Prefetch.Cron, time.Now())
 		if err == nil && duration > 0 {
 			ticker := time.NewTicker(duration) // set prefetch as specified in config file
 			log.Printf("The prefetching routine will be run on %v", time.Now().Add(duration))
@@ -39,7 +39,7 @@ func setupPrefetchTicker() *time.Ticker {
 						prefetchPackages()
 						lastTimeInvoked = time.Now()
 						now := time.Now()
-						duration, err := getPrefetchDuration(config.Prefetch.Cron, time.Now())
+						duration, err := getCronDuration(config.Prefetch.Cron, time.Now())
 						if err == nil && duration > 0 {
 							ticker.Reset(duration) // update to the new timing
 							log.Printf("On %v the prefetching routine will be run again", now.Add(duration))
@@ -253,6 +253,8 @@ func prefetchAllPkgs() {
 func prefetchPackages() {
 	if prefetchDB != nil {
 		log.Printf("Starting prefetching routine...\n")
+		// update mirrorlists from file if they exist
+		updateMirrorlists()
 		// purge all useless files
 		cleanPrefetchDB()
 		// prefetch all Packages
