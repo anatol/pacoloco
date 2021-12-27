@@ -441,7 +441,7 @@ func TestPrefetchPackages(t *testing.T) {
 	prefetchPackages()
 }
 
-func TestGetPrefetchDuration(t *testing.T) {
+func TestGetCronDuration(t *testing.T) {
 	now := time.Now()
 	var expectedTime time.Time
 	if now.Hour() < 3 {
@@ -451,12 +451,12 @@ func TestGetPrefetchDuration(t *testing.T) {
 	}
 	expectedTime = time.Date(expectedTime.Year(), expectedTime.Month(), expectedTime.Day(), 3, 0, 0, 0, expectedTime.Location())
 	expectedDuration := expectedTime.Sub(now)
-	got, err := getPrefetchDuration("0 0 3 * * * *", now)
+	got, err := getCronDuration("0 0 3 * * * *", now)
 	if err != nil {
 		t.Errorf("Unexpected error %v", err)
 	}
 	if got != expectedDuration {
-		t.Errorf("getPrefetchDuration() = %v, want %v", got, expectedDuration)
+		t.Errorf("getCronDuration() = %v, want %v", got, expectedDuration)
 	}
 
 }
