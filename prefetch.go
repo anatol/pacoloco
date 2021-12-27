@@ -70,7 +70,7 @@ func setupPrefetch() {
 }
 
 // function to update the db when a package is being actively requested
-func updateDBDownloadedFile(repoName string, fileName string) {
+func updateDBRequestedFile(repoName string, fileName string) {
 	// don't register when signature gets downloaded, to reduce db accesses
 	if !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
 		pkg, err := getPackageFromFilenameAndRepo(repoName, fileName)
@@ -164,7 +164,7 @@ func updateDBPrefetchedFile(repoName string, fileName string) {
 // purges all possible package files
 func purgePkgIfExists(pkgToDel *Package) {
 	if pkgToDel != nil {
-		basePathsToDelete := getPackagePaths(*pkgToDel)
+		basePathsToDelete := getAllPackagePaths(*pkgToDel)
 		for _, p := range basePathsToDelete {
 			pathToDelete := path.Join(config.CacheDir, p)
 			if _, err := os.Stat(pathToDelete); !os.IsNotExist(err) {
@@ -227,7 +227,7 @@ func cleanPrefetchDB() {
 		}
 
 		// should be useless but this guarantees that everything got cleaned properly
-		_ = deleteRepoTable()
+		_ = deleteMirrorPkgsTable()
 		log.Printf("Db cleaned.\n")
 	} else {
 		log.Fatalf("Shouldn't call a prefetch purge when prefetch is not set in the yaml. This is most likely a bug.")
@@ -237,7 +237,7 @@ func cleanPrefetchDB() {
 // This calls the actual prefetching process, should be called once the db had been cleaned
 func prefetchAllPkgs() {
 	updateMirrorsDbs()
-	defer deleteRepoTable()
+	defer deleteMirrorPkgsTable()
 	pkgs := getPkgsToUpdate()
 	for _, p := range pkgs {
 		pkg := getPackage(p.PackageName, p.Arch, p.RepoName)

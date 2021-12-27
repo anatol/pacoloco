@@ -261,16 +261,16 @@ func TestGetPacolocoURL(t *testing.T) {
 	}
 }
 
-func TestBuildRepoPkg(t *testing.T) {
-	got, err := buildRepoPkg("libstdc++5-3.3.6-7-x86_64.pkg.tar.zst", "testRepo", "community")
+func TestBuildMirrorPkg(t *testing.T) {
+	got, err := buildMirrorPkg("libstdc++5-3.3.6-7-x86_64.pkg.tar.zst", "testRepo", "community")
 	if err != nil {
 		log.Fatal(err)
 	}
-	want := RepoPackage{PackageName: "libstdc++5", RepoName: "testRepo", Version: "3.3.6-7", Arch: "x86_64", DownloadURL: "/repo/testRepo/community/libstdc++5-3.3.6-7-x86_64"}
+	want := MirrorPackage{PackageName: "libstdc++5", RepoName: "testRepo", Version: "3.3.6-7", Arch: "x86_64", DownloadURL: "/repo/testRepo/community/libstdc++5-3.3.6-7-x86_64", FileExt: ".pkg.tar.zst"}
 	if !cmp.Equal(got, want) {
 		t.Errorf("Got %v, want %v", got, want)
 	}
-	if _, err = buildRepoPkg("webkit2gtk-2.26.4-1-x86_6-4.pkg.tar.zst", "testRepo", ""); err == nil {
+	if _, err = buildMirrorPkg("webkit2gtk-2.26.4-1-x86_6-4.pkg.tar.zst", "testRepo", ""); err == nil {
 		t.Errorf("Should have thrown an error cause the string is invalid")
 	}
 }

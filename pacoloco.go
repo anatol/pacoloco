@@ -36,8 +36,8 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-	// source: https://archlinux.org/pacman/makepkg.conf.5.html PKGEXT section
-	allowedPackagesExtensions = []string{".pkg.tar.gz", ".pkg.tar.bz2", ".pkg.tar.xz", ".pkg.tar.zst", ".pkg.tar.lzo", ".pkg.tar.lrz", ".pkg.tar.lz4", ".pkg.tar.lz", ".pkg.tar.Z", ".pkg.tar"}
+	// source: https://archlinux.org/pacman/makepkg.conf.5.html PKGEXT section, sorted with compressed formats as first.
+	allowedPackagesExtensions = []string{".pkg.tar.zst", ".pkg.tar.gz", ".pkg.tar.xz", ".pkg.tar.bz2", ".pkg.tar.lzo", ".pkg.tar.lrz", ".pkg.tar.lz4", ".pkg.tar.lz", ".pkg.tar.Z", ".pkg.tar"}
 
 	// Filename regex explanation (also here https://regex101.com/r/qB0fQ7/35 )
 	/*
@@ -283,7 +283,7 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 		if repo.URL != "" {
 			served, err = downloadFileAndSend(repo.URL+path+"/"+fileName, filePath, ifLater, w)
 			if err == nil && config.Prefetch != nil && !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
-				updateDBDownloadedFile(repoName, fileName) // update info for prefetching
+				updateDBRequestedFile(repoName, fileName) // update info for prefetching
 			} else if err == nil && config.Prefetch != nil && strings.HasSuffix(fileName, ".db") {
 				addDBfileToDB(repo.URL+path+"/"+fileName, repoName)
 			}
@@ -292,7 +292,7 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 				served, err = downloadFileAndSend(url+path+"/"+fileName, filePath, ifLater, w)
 				if err == nil {
 					if config.Prefetch != nil && !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
-						updateDBDownloadedFile(repoName, fileName) // update info for prefetching
+						updateDBRequestedFile(repoName, fileName) // update info for prefetching
 					} else if err == nil && config.Prefetch != nil && strings.HasSuffix(fileName, ".db") {
 						addDBfileToDB(url+path+"/"+fileName, repoName)
 					}
@@ -305,7 +305,7 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 	if !served {
 		err = sendCachedFile(w, req, fileName, filePath)
 		if err == nil && config.Prefetch != nil && !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
-			updateDBDownloadedFile(repoName, fileName) // update info for prefetching
+			updateDBRequestedFile(repoName, fileName) // update info for prefetching
 		}
 	}
 	return err

@@ -191,7 +191,7 @@ func testPrefetchRealDB(t *testing.T) {
 	if err != nil {
 		t.Errorf("This shouldn't fail. Error: %v", err)
 	}
-	if err = downloadAndLoadDB(mirror); err != nil {
+	if err = downloadAndParseDb(mirror); err != nil {
 		t.Errorf("This shouldn't fail at all. Error: %v", err)
 	}
 }
@@ -285,9 +285,9 @@ func testIntegrationPrefetchAllPkgs(t *testing.T) {
 		t.Errorf("Should not generate errors, but got %v", err)
 	}
 	// now add a fake older version of a package which is in the db
-	updateDBDownloadedFile("repo3", "acl-2.0-0-x86_64.pkg.tar.zst")
+	updateDBRequestedFile("repo3", "acl-2.0-0-x86_64.pkg.tar.zst")
 	// now i add a bit newer one, to ensure that the db gets updated accordingly
-	updateDBDownloadedFile("repo3", "acl-2.1-0-x86_64.pkg.tar.zst")
+	updateDBRequestedFile("repo3", "acl-2.1-0-x86_64.pkg.tar.zst")
 	// create the directories in the cache
 	if err := os.Mkdir(path.Join(config.CacheDir, "pkgs", "repo3"), os.ModePerm); err != nil {
 		t.Fatal(err)
@@ -305,13 +305,22 @@ func testIntegrationPrefetchAllPkgs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// create a package file which should be prefetched with signature (the signature is invalid but I'm not checking it) at the mirror
+	// create a package file which should be prefetched with signature (the signature is invalid but I'm not checking it) on the mirror
 	pkgAtMirror := path.Join(mirrorDir, "mirror3", "acl-2.3.1-1-x86_64.pkg.tar.zst")
 	pkgContent := "TEST content for the file to be prefetched"
 	if err := ioutil.WriteFile(pkgAtMirror, []byte(pkgContent), os.ModePerm); err != nil {
 		t.Fatal(err)
 	}
 	if err := ioutil.WriteFile(pkgAtMirror+".sig", []byte(pkgContent), os.ModePerm); err != nil {
+		t.Fatal(err)
+	}
+	// create an updated package file with a wrong extension which should NOT be prefetched with signature (the signature is invalid but I'm not checking it) on the mirror
+	wrongPkgAtMirror := path.Join(mirrorDir, "mirror3", "acl-2.3.1-1-x86_64.pkg.tar")
+	wrongPkgContent := "TEST content for the file which should NOT be prefetched"
+	if err := ioutil.WriteFile(wrongPkgAtMirror, []byte(wrongPkgContent), os.ModePerm); err != nil {
+		t.Fatal(err)
+	}
+	if err := ioutil.WriteFile(wrongPkgAtMirror+".sig", []byte(wrongPkgContent), os.ModePerm); err != nil {
 		t.Fatal(err)
 	}
 	// now if we call the prefetch procedure, it should try to prefetch the file and its signature
@@ -363,5 +372,21 @@ func testIntegrationPrefetchAllPkgs(t *testing.T) {
 	want = []byte(pkgContent)
 	if !cmp.Equal(got, want) {
 		t.Errorf("Got %v ,want %v", got, want)
+	}
+	// new packages with the wrong extension should not appear
+	pkgAtCache = path.Join(config.CacheDir, "pkgs", "repo3", "acl-2.3.1-1-x86_64.pkg.tar")
+	exists, err = fileExists(pkgAtCache)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if exists {
+		t.Errorf("The file %v should not exist", pkgAtCache)
+	}
+	exists, err = fileExists(pkgAtCache + ".sig")
+	if err != nil {
+		log.Fatal(err)
+	}
+	if exists {
+		t.Errorf("The file %v should not exist", pkgAtCache+".sig")
 	}
 }
