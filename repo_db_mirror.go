@@ -15,8 +15,6 @@ import (
 )
 
 // Uncompresses a gzip file
-// I don't know how to set some limits to avoid OOM with gzip bombs.
-// Shouldn't happen but could happen if a mirror gets compromised
 func uncompressGZ(filePath string, targetFile string) error {
 	gzipfile, err := os.Open(filePath)
 	if err != nil {
@@ -28,6 +26,11 @@ func uncompressGZ(filePath string, targetFile string) error {
 		log.Printf("error: %v\n", err)
 		return err
 	}
+	limitedReader := io.LimitReader(reader, 100*1024*1024) // Limits the size of the extracted file up to 100MB, so far community db is around 20MB
+	if err != nil {
+		log.Printf("error: %v\n", err)
+		return err
+	}
 	defer reader.Close()
 	writer, err := os.Create(targetFile)
 	if err != nil {
@@ -35,7 +38,7 @@ func uncompressGZ(filePath string, targetFile string) error {
 		return err
 	}
 	defer writer.Close()
-	if _, err = io.Copy(writer, reader); err != nil {
+	if _, err = io.Copy(writer, limitedReader); err != nil {
 		log.Printf("error: %v\n", err)
 		return err
 	}

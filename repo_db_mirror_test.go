@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/tar"
+	"bufio"
 	"compress/gzip"
 	"io"
 	"io/ioutil"
@@ -217,6 +218,45 @@ func TestUncompressGZ(t *testing.T) {
 	}
 	if err != nil {
 		log.Fatal(err)
+	}
+}
+
+func TestUncompressGZBomb(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping testing in short mode")
+	}
+	tmpDir := testSetupHelper(t)
+	filePath := path.Join(tmpDir, "test.gz")
+	var gzipBombSize int64
+	gzipBombSize = 120 * 1024 * 1024
+	gzipfile, err := os.Create(filePath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	zero, err := os.Open("/dev/zero")
+	if err != nil {
+		t.Skip("Cannot open /dev/zero, skipping gzip bomb test")
+	}
+	defer zero.Close()
+	writer := gzip.NewWriter(gzipfile)
+	reader := io.LimitReader(bufio.NewReader(zero), gzipBombSize)
+	if _, err = io.Copy(writer, reader); err != nil {
+		log.Fatal(err)
+	}
+	writer.Close()
+	err = uncompressGZ(filePath, filePath+".uncompressed")
+	if err != nil {
+		// It is a success if it happens
+		return
+	}
+	fi, err := os.Stat(filePath + ".uncompressed")
+	if err != nil {
+		// It is a success if it happens
+		return
+	}
+	size := fi.Size()
+	if size >= gzipBombSize {
+		log.Fatal("It fully extracted the gzip bomb, this shouldn't happen")
 	}
 }
 func TestExtractFilenamesFromTar(t *testing.T) {
