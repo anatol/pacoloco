@@ -63,7 +63,7 @@ func TestSetupPrefetch(t *testing.T) {
 		t.Errorf("Prefetch DB is uninitilized")
 	}
 	conn := testDbConnectionHelper(path.Join(tmpDir, DefaultDBName))
-	for _, table := range []string{"mirror_dbs", "packages", "repo_packages"} {
+	for _, table := range []string{"mirror_dbs", "packages", "mirror_packages"} {
 		res, err := conn.Query("select * from " + table)
 		if err != nil {
 			log.Fatal(err)
@@ -89,16 +89,16 @@ func TestSetupPrefetchTicker(t *testing.T) {
 	ticker.Stop()
 }
 
-func TestUpdateDBDownloadedFile(t *testing.T) {
+func TestUpdateDBRequestedFile(t *testing.T) {
 	tmpDir := testSetupHelper(t)
 	setupPrefetch()
 	conn := testDbConnectionHelper(path.Join(tmpDir, DefaultDBName))
-	updateDBDownloadedFile("nope", "Wrongfile.db")
-	updateDBDownloadedFile("nope", "Wrongfile.zst")
-	updateDBDownloadedFile("nope", "fakeacceptablefile.pkg.tar.zst")     // doesn't have the correct format
-	updateDBDownloadedFile("nope", "acl-2.3.1-1-x86_64.pkg.tar.zst.sig") // do not save signatures too in the db
+	updateDBRequestedFile("nope", "Wrongfile.db")
+	updateDBRequestedFile("nope", "Wrongfile.zst")
+	updateDBRequestedFile("nope", "fakeacceptablefile.pkg.tar.zst")     // doesn't have the correct format
+	updateDBRequestedFile("nope", "acl-2.3.1-1-x86_64.pkg.tar.zst.sig") // do not save signatures too in the db
 	// none of those should be in the db, now i'll check
-	for _, table := range []string{"mirror_dbs", "packages", "repo_packages"} {
+	for _, table := range []string{"mirror_dbs", "packages", "mirror_packages"} {
 		res, err := conn.Query("select * from " + table)
 		if err != nil {
 			log.Fatal(err)
@@ -110,11 +110,11 @@ func TestUpdateDBDownloadedFile(t *testing.T) {
 			if err != nil {
 				log.Fatal(err)
 			}
-			t.Fatalf("updateDBDownloadedFile shouldn't create entries in %v with bad values\n", table)
+			t.Fatalf("updateDBRequestedFile shouldn't create entries in %v with bad values\n", table)
 		}
 	}
 	// this one should be added
-	updateDBDownloadedFile("foo", "webkit-2.3.1-1-x86_64.pkg.tar.zst")
+	updateDBRequestedFile("foo", "webkit-2.3.1-1-x86_64.pkg.tar.zst")
 	res, err := conn.Query("select * from packages")
 	if err != nil {
 		log.Fatal(err)
@@ -147,11 +147,11 @@ func TestUpdateDBDownloadedFile(t *testing.T) {
 		}
 		return
 	}
-	t.Fatalf("updateDBDownloadedFile should create entries in packages\n")
+	t.Fatalf("updateDBRequestedFile should create entries in packages\n")
 	// this one should replace the previous one
-	updateDBDownloadedFile("foo", "webkit-2.5.1-1-x86_64.pkg.tar.zst")
+	updateDBRequestedFile("foo", "webkit-2.5.1-1-x86_64.pkg.tar.zst")
 	// supposing two people downloaded it at the same time
-	updateDBDownloadedFile("foo", "webkit-2.5.1-1-x86_64.pkg.tar.zst")
+	updateDBRequestedFile("foo", "webkit-2.5.1-1-x86_64.pkg.tar.zst")
 	res, err = conn.Query("select * from packages")
 	if err != nil {
 		log.Fatal(err)
@@ -185,7 +185,7 @@ func TestUpdateDBDownloadedFile(t *testing.T) {
 		}
 		counter++
 		if counter > 1 {
-			t.Fatalf("updateDBDownloadedFile shouldn't have created multiple entries\n")
+			t.Fatalf("updateDBRequestedFile shouldn't have created multiple entries\n")
 		}
 	}
 
@@ -196,7 +196,7 @@ func TestUpdateDBPrefetchedFile(t *testing.T) {
 	setupPrefetch()
 	conn := testDbConnectionHelper(path.Join(tmpDir, DefaultDBName))
 	// add a fake download entry
-	updateDBDownloadedFile("foo", "webkit-2.3.1-1-x86_64.pkg.tar.zst")
+	updateDBRequestedFile("foo", "webkit-2.3.1-1-x86_64.pkg.tar.zst")
 	oldPkgPath := path.Join(tmpDir, "pkgs", "foo", "webkit-2.3.1-1-x86_64.pkg.tar.zst")
 	if err := os.MkdirAll(path.Join(tmpDir, "pkgs"), 0755); err != nil {
 		log.Fatal(err)
@@ -294,7 +294,7 @@ func TestUpdateDBPrefetchedFile(t *testing.T) {
 func TestPurgePkgIfExists(t *testing.T) {
 	tmpDir := testSetupHelper(t)
 	setupPrefetch()
-	updateDBDownloadedFile("foo", "webkit-2.3.1-1-x86_64.pkg.tar.zst")
+	updateDBRequestedFile("foo", "webkit-2.3.1-1-x86_64.pkg.tar.zst")
 	oldPkgPath := path.Join(tmpDir, "pkgs", "foo", "webkit-2.3.1-1-x86_64.pkg.tar.zst")
 	if err := os.MkdirAll(path.Join(tmpDir, "pkgs"), 0755); err != nil {
 		log.Fatal(err)
@@ -340,7 +340,7 @@ func TestPurgePkgIfExists(t *testing.T) {
 func TestCleanPrefetchDB(t *testing.T) {
 	tmpDir := testSetupHelper(t)
 	setupPrefetch()
-	updateDBDownloadedFile("foo", "webkit-2.3.1-1-x86_64.pkg.tar.zst")
+	updateDBRequestedFile("foo", "webkit-2.3.1-1-x86_64.pkg.tar.zst")
 	oldPkgPath := path.Join(tmpDir, "pkgs", "foo", "webkit-2.3.1-1-x86_64.pkg.tar.zst")
 	if err := os.MkdirAll(path.Join(tmpDir, "pkgs"), 0755); err != nil {
 		log.Fatal(err)

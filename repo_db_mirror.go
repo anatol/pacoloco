@@ -85,19 +85,20 @@ func getPacolocoURL(pkg Package, prefix string) string {
 	return strings.ReplaceAll(("/repo/" + pkg.RepoName + "/" + prefix + "/" + pkg.PackageName + "-" + pkg.Version + "-" + pkg.Arch), "//", "/")
 }
 
-// Builds a repository package
+// Builds a mirror package
 // It requires the prefix, which is the relative path in which the db is contained
-func buildRepoPkg(fileName string, repoName string, prefix string) (RepoPackage, error) {
+func buildMirrorPkg(fileName string, repoName string, prefix string) (MirrorPackage, error) {
 	matches := filenameRegex.FindStringSubmatch(fileName)
 	if len(matches) >= 7 {
 		packageName := matches[1]
 		version := matches[2]
 		arch := matches[3]
+		ext := matches[5]
 		pkg := Package{PackageName: packageName, Version: version, Arch: arch, RepoName: repoName}
 		pacolocoURL := getPacolocoURL(pkg, prefix)
-		return RepoPackage{PackageName: packageName, Version: version, Arch: arch, DownloadURL: pacolocoURL, RepoName: repoName}, nil
+		return MirrorPackage{PackageName: packageName, Version: version, Arch: arch, DownloadURL: pacolocoURL, RepoName: repoName, FileExt: ext}, nil
 	}
-	return RepoPackage{}, fmt.Errorf("filename %v does not match regex, matches length is %d", fileName, len(matches))
+	return MirrorPackage{}, fmt.Errorf("filename %v does not match regex, matches length is %d", fileName, len(matches))
 }
 
 // Returns the "path" field from a mirror url, e.g. from
@@ -136,8 +137,8 @@ func getPrefixFromMirrorDB(mirror MirrorDB) (string, error) {
 	return "", fmt.Errorf("error: Mirror link %v does not exist in repo %v", mirror.URL, mirror.RepoName)
 }
 
-// Downloads the db from the mirror and adds RepoPackages
-func downloadAndLoadDB(mirror MirrorDB) error {
+// Downloads the db from the mirror and adds MirrorPackages
+func downloadAndParseDb(mirror MirrorDB) error {
 	matches := urlRegex.FindStringSubmatch(mirror.URL)
 	if len(matches) == 0 {
 		return fmt.Errorf("url '%v' is invalid, does not match path regex", mirror.URL)
@@ -182,9 +183,9 @@ func downloadAndLoadDB(mirror MirrorDB) error {
 		return err
 	}
 	log.Printf("Adding entries to db...")
-	var repoList []RepoPackage
+	var repoList []MirrorPackage
 	for _, fileName := range fileList {
-		rpkg, err := buildRepoPkg(fileName, mirror.RepoName, prefix)
+		rpkg, err := buildMirrorPkg(fileName, mirror.RepoName, prefix)
 		if err != nil {
 			// If a repo package has an invalid name
 			// e.g. is not a repo package, maybe it is a src package or whatever, we skip it
@@ -221,8 +222,8 @@ func downloadAndLoadDB(mirror MirrorDB) error {
 	return nil
 }
 
-// download dbs from their URLs stored in the mirror_dbs table and load their content in the repo_packages table
-func downloadAndLoadDbs() error {
+// download dbs from their URLs stored in the mirror_dbs table and load their content in the mirror_packages table
+func downloadAndParseDbs() error {
 	mirrors := getAllMirrorsDB()
 	// create tmp directory to store the db files
 	dbsPath := filepath.Join(config.CacheDir, "tmp-db")
@@ -232,7 +233,7 @@ func downloadAndLoadDbs() error {
 		}
 	}
 	for _, mirror := range mirrors {
-		if err := downloadAndLoadDB(mirror); err != nil {
+		if err := downloadAndParseDb(mirror); err != nil {
 			// If a mirror is down or a database file is not available, we simply skip it cause
 			// the cleanPrefetchDB procedure should take care of purging dead mirrors
 			log.Printf("An error occurred for mirror %v :%v\n", mirror, err)
@@ -245,5 +246,5 @@ func updateMirrorsDbs() error {
 	if err := createRepoTable(); err != nil {
 		return err
 	}
-	return downloadAndLoadDbs()
+	return downloadAndParseDbs()
 }

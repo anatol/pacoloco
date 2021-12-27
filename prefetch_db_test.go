@@ -10,10 +10,10 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
-func TestDeleteCreateRepoTable(t *testing.T) {
+func TestDeleteCreateMirrorPkgsTable(t *testing.T) {
 	tmpDir := testSetupHelper(t)
 	setupPrefetch()
-	if err := deleteRepoTable(); err != nil {
+	if err := deleteMirrorPkgsTable(); err != nil {
 		t.Fatal(err)
 	}
 	exists, err := fileExists(path.Join(tmpDir, DefaultDBName))
@@ -24,26 +24,26 @@ func TestDeleteCreateRepoTable(t *testing.T) {
 		t.Fatal("setupPrefetch didn't create the db file")
 	}
 	conn := testDbConnectionHelper(path.Join(tmpDir, DefaultDBName))
-	for _, table := range []string{"repo_packages"} {
+	for _, table := range []string{"mirror_packages"} {
 		if _, err := conn.Query("select * from " + table); err == nil {
-			t.Errorf("repo_packages table shouldn't exist")
+			t.Errorf("mirror_packages table shouldn't exist")
 		}
 	}
 	if err := createRepoTable(); err != nil {
 		t.Fatal(err)
 	}
 
-	for _, table := range []string{"repo_packages"} {
+	for _, table := range []string{"mirror_packages"} {
 		if _, err := conn.Query("select * from " + table); err != nil {
-			t.Errorf("repo_packages table should exist")
+			t.Errorf("mirror_packages table should exist")
 		}
 	}
-	if err := deleteRepoTable(); err != nil {
+	if err := deleteMirrorPkgsTable(); err != nil {
 		t.Fatal(err)
 	}
-	for _, table := range []string{"repo_packages"} {
+	for _, table := range []string{"mirror_packages"} {
 		if _, err := conn.Query("select * from " + table); err == nil {
-			t.Errorf("repo_packages table shouldn't exist")
+			t.Errorf("mirror_packages table shouldn't exist")
 		}
 	}
 
@@ -60,7 +60,7 @@ func TestCreatePrefetchDB(t *testing.T) {
 		t.Fatal("createPrefetchDB didn't create the db file")
 	}
 	conn := testDbConnectionHelper(path.Join(tmpDir, DefaultDBName))
-	for _, table := range []string{"mirror_dbs", "packages", "repo_packages"} {
+	for _, table := range []string{"mirror_dbs", "packages", "mirror_packages"} {
 		res, err := conn.Query("select * from " + table)
 		if err != nil {
 			t.Fatal(err)
@@ -93,7 +93,7 @@ func TestGetPackage(t *testing.T) {
 	testSetupHelper(t)
 	setupPrefetch()
 	// I'm lazy, i use this to add data
-	updateDBDownloadedFile("foo", "webkit-2.3.1-1-x86_64.pkg.tar.zst")
+	updateDBRequestedFile("foo", "webkit-2.3.1-1-x86_64.pkg.tar.zst")
 	got := getPackage("webkit", "x86_64", "foo")
 	want := Package{PackageName: "webkit", Version: "2.3.1-1", Arch: "x86_64", RepoName: "foo", LastTimeDownloaded: &now, LastTimeRepoUpdated: &now}
 	if !cmp.Equal(got, want, cmpopts.IgnoreFields(Package{}, "LastTimeDownloaded", "LastTimeRepoUpdated")) {
@@ -118,10 +118,10 @@ func TestGetPackage(t *testing.T) {
 func TestGetAndDropUnusedPackages(t *testing.T) {
 	testSetupHelper(t)
 	setupPrefetch()
-	updateDBDownloadedFile("foo", "webkit-2.3.1-1-x86_64.pkg.tar.zst")
+	updateDBRequestedFile("foo", "webkit-2.3.1-1-x86_64.pkg.tar.zst")
 	pkg := getPackage("webkit", "x86_64", "foo")
 	if pkg.PackageName == "" {
-		t.Error("updateDBDownloadedFile didn't work")
+		t.Error("updateDBRequestedFile didn't work")
 	}
 	oneMonthAgo := time.Now().AddDate(0, -1, 0) // more or less
 	// updated one month ago but downloaded now, should not be deleted
@@ -156,7 +156,7 @@ func TestGetAndDropUnusedPackages(t *testing.T) {
 func TestGetAndDropDeadPackages(t *testing.T) {
 	testSetupHelper(t)
 	setupPrefetch()
-	updateDBDownloadedFile("foo", "webkit-2.3.1-1-x86_64.pkg.tar.zst")
+	updateDBRequestedFile("foo", "webkit-2.3.1-1-x86_64.pkg.tar.zst")
 	pkg := getPackage("webkit", "x86_64", "foo")
 	oneMonthAgo := time.Now().AddDate(0, -1, 0) // more or less
 	// updated one month ago but downloaded now, should not be deleted
@@ -217,10 +217,10 @@ func TestGetPkgsToUpdate(t *testing.T) {
 	// Create a repo pkg and a package, then check if it returns the couple
 	testSetupHelper(t)
 	setupPrefetch()
-	updateDBDownloadedFile("foo", "webkit-2.3.1-1-x86_64.pkg.tar.zst")
-	updateDBDownloadedFile("foo", "webkit2-2.3.1-1-x86_64.pkg.tar.zst")
-	updateDBDownloadedFile("foo", "webkit3-2.4.1-1-x86_64.pkg.tar.zst")
-	repoPkg, err := buildRepoPkg("webkit-2.4.1-1-x86_64.pkg.tar.zst", "foo", "")
+	updateDBRequestedFile("foo", "webkit-2.3.1-1-x86_64.pkg.tar.zst")
+	updateDBRequestedFile("foo", "webkit2-2.3.1-1-x86_64.pkg.tar.zst")
+	updateDBRequestedFile("foo", "webkit3-2.4.1-1-x86_64.pkg.tar.zst")
+	repoPkg, err := buildMirrorPkg("webkit-2.4.1-1-x86_64.pkg.tar.zst", "foo", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,7 +228,7 @@ func TestGetPkgsToUpdate(t *testing.T) {
 		t.Error(db.Error)
 	}
 	// same version, shouldn't be included
-	repoPkg, err = buildRepoPkg("webkit3-2.4.1-1-x86_64.pkg.tar.zst", "foo", "")
+	repoPkg, err = buildMirrorPkg("webkit3-2.4.1-1-x86_64.pkg.tar.zst", "foo", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +236,7 @@ func TestGetPkgsToUpdate(t *testing.T) {
 		t.Error(db.Error)
 	}
 	got := getPkgsToUpdate()
-	want := []PkgToUpdate{PkgToUpdate{PackageName: "webkit", RepoName: "foo", Arch: "x86_64", DownloadURL: "/repo/foo/webkit-2.4.1-1-x86_64"}}
+	want := []PkgToUpdate{PkgToUpdate{PackageName: "webkit", RepoName: "foo", Arch: "x86_64", DownloadURL: "/repo/foo/webkit-2.4.1-1-x86_64", FileExt: ".pkg.tar.zst"}}
 	if !cmp.Equal(got, want) {
 		t.Errorf("\ngot  %v\nwant %v", got, want)
 	}

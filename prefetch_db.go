@@ -24,8 +24,8 @@ type Package struct {
 	LastTimeRepoUpdated *time.Time `gorm:"not null"`
 }
 
-// there are many possible paths for a package, this returns all of the possible ones
-func getPackagePaths(pkg Package) []string {
+// there are many possible paths for a package, this function returns ALL the possible ones
+func getAllPackagePaths(pkg Package) []string {
 	baseString := path.Join("pkgs", pkg.RepoName, pkg.PackageName+"-"+pkg.Version+"-"+pkg.Arch)
 	var pkgPaths []string
 	for _, ext := range allowedPackagesExtensions {
@@ -43,21 +43,25 @@ type MirrorDB struct {
 	RepoName           string     `gorm:"primaryKey;not null"`
 	LastTimeDownloaded *time.Time `gorm:"not null"`
 }
-type RepoPackage struct {
+
+// Mirror Package is the struct that contains the relevant info about a package on a mirror. It is extracted from .db files
+type MirrorPackage struct {
 	PackageName string `gorm:"primaryKey;not null"`
 	Version     string `gorm:"not null"`
 	Arch        string `gorm:"primaryKey;not null"`
 	RepoName    string `gorm:"primaryKey;not null"`
-	DownloadURL string `gorm:"not null"`
+	FileExt     string `gorm:"not null"`
+	DownloadURL string `gorm:"not null"` // This is NOT the complete url, it is something like /repo/foo/webkit-2.4.1-1-x86_64
+	// which is stripped from the domain part and the file extension (because many domains may be available and multiple files should be downloaded)
 }
 
 func createRepoTable() error {
-	_ = prefetchDB.Migrator().DropTable(&RepoPackage{})
-	return prefetchDB.Migrator().CreateTable(&RepoPackage{})
+	_ = prefetchDB.Migrator().DropTable(&MirrorPackage{})
+	return prefetchDB.Migrator().CreateTable(&MirrorPackage{})
 }
 
-func deleteRepoTable() error {
-	return prefetchDB.Migrator().DropTable(&RepoPackage{})
+func deleteMirrorPkgsTable() error {
+	return prefetchDB.Migrator().DropTable(&MirrorPackage{})
 }
 
 // Creates the db if it doesn't exist
@@ -83,7 +87,7 @@ func createPrefetchDB() {
 		}
 		db.Migrator().CreateTable(&Package{})
 		db.Migrator().CreateTable(&MirrorDB{})
-		db.Migrator().CreateTable(&RepoPackage{})
+		db.Migrator().CreateTable(&MirrorPackage{})
 	}
 }
 
@@ -162,28 +166,34 @@ type PkgToUpdate struct {
 	Arch        string
 	RepoName    string
 	DownloadURL string
+	FileExt     string
 }
 
 func getPkgToUpdateDownloadURLs(p PkgToUpdate) []string {
 	baseString := p.DownloadURL
 	var urls []string
 	for _, ext := range allowedPackagesExtensions {
-		urls = append(urls, baseString+ext)
-		urls = append(urls, baseString+ext+".sig")
+		// checking if the file extension is something legit
+		if ext == p.FileExt {
+			urls = append(urls, baseString+ext)
+			urls = append(urls, baseString+ext+".sig")
+			return urls
+		}
 	}
+	log.Println("warning: file extension \"" + p.FileExt + "\" does not belong to the allowed set of packages extensions, so \"" + baseString + p.FileExt + "\" won't be downloaded")
 	return urls
 }
 
 // returns a list of packages which should be prefetched
 func getPkgsToUpdate() []PkgToUpdate {
-	rows, err := prefetchDB.Model(&Package{}).Joins("inner join repo_packages on repo_packages.package_name = packages.package_name AND repo_packages.arch = packages.arch AND repo_packages.repo_name = packages.repo_name AND repo_packages.version <> packages.version").Select("packages.package_name,packages.arch,packages.repo_name,repo_packages.download_url").Rows()
+	rows, err := prefetchDB.Model(&Package{}).Joins("inner join mirror_packages on mirror_packages.package_name = packages.package_name AND mirror_packages.arch = packages.arch AND mirror_packages.repo_name = packages.repo_name AND mirror_packages.version <> packages.version").Select("packages.package_name,packages.arch,packages.repo_name,mirror_packages.download_url,mirror_packages.file_ext").Rows()
 	if err != nil {
 		log.Fatal(err)
 	}
 	var pkgs []PkgToUpdate
 	for rows.Next() {
 		var pkg PkgToUpdate
-		rows.Scan(&pkg.PackageName, &pkg.Arch, &pkg.RepoName, &pkg.DownloadURL)
+		rows.Scan(&pkg.PackageName, &pkg.Arch, &pkg.RepoName, &pkg.DownloadURL, &pkg.FileExt)
 		pkgs = append(pkgs, pkg)
 	}
 	return pkgs
