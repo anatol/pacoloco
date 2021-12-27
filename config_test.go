@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path"
 	"reflect"
 	"testing"
 
@@ -115,5 +117,49 @@ repos:
 
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", *got, *want)
+	}
+}
+
+func TestLoadConfigWithMirrorlist(t *testing.T) {
+	var temp = t.TempDir()
+	var tmpfile = path.Join(temp, "tmpMirrorFile")
+
+	f, err := os.Create(tmpfile)
+	if err != nil {
+		t.Error(err)
+	}
+	f.Close()
+	got := parseConfig([]byte(`
+cache_dir: ` + temp + `
+purge_files_after: 2592000 # 3600 * 24 * 30days
+prefetch:
+  cron: 0 0 3 * * * *
+  ttl_unaccessed_in_days: 5
+download_timeout: 200
+port: 9139
+repos:
+  archlinux:
+    mirrorlist: ` + tmpfile + `
+
+`))
+	want := &Config{
+		CacheDir: temp,
+		Port:     9139,
+		Repos: map[string]Repo{
+			"archlinux": Repo{
+				Mirrorlist: tmpfile,
+			},
+		},
+		PurgeFilesAfter: 2592000,
+		DownloadTimeout: 200,
+		Prefetch:        &RefreshPeriod{Cron: "0 0 3 * * * *", TTLUnaccessed: 5, TTLUnupdated: 200},
+	}
+	if !cmp.Equal(*got, *want, cmpopts.IgnoreFields(Config{}, "Prefetch")) {
+		t.Errorf("got %v, want %v", *got, *want)
+	}
+	gotR := *(*got).Prefetch
+	wantR := *(*want).Prefetch
+	if !cmp.Equal(gotR, wantR) {
+		t.Errorf("got %v, want %v", gotR, wantR)
 	}
 }

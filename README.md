@@ -77,6 +77,8 @@ repos:
     url: http://pkgbuild.com/~anatolik/quarry/x86_64
   sublime:
     url: https://download.sublimetext.com/arch/stable/x86_64
+  archlinux-reflector:
+    mirrorlist: /etc/pacman.d/reflector_mirrorlist # Be careful! Check that pacoloco URL is NOT included in that file!
 http_proxy: http://foo.company.com:8989
 prefetch: # optional section, add it if you want to enable prefetching
   cron: 0 0 3 * * * * # standard cron expression (https://en.wikipedia.org/wiki/Cron#CRON_expression) to define how frequently prefetch, see https://github.com/gorhill/cronexpr#implementation for documentation.
@@ -93,6 +95,7 @@ prefetch: # optional section, add it if you want to enable prefetching
 * `http_proxy` proxy configuration that is used to fetch files from repositories.
 * The `prefetch` section allows to enable packages prefetching. Comment it out to disable it.
 * To test out if the cron value does what you'd expect to do, check cronexpr [implementation](https://github.com/gorhill/cronexpr#implementation) or [test it](https://play.golang.org/p/IK2hrIV7tUk)
+* For what regards `mirrorlist`, be sure that pacoloco itself is NOT included in the chosen `mirrorlist` file. It can be integrated with reflector too, either by changing reflector's output path or by including pacoloco directly for standard repos in `/etc/pacman.conf` (e.g. adding a `Server=...` entry or a custom mirrorlist file which includes only pacoloco URL).
 
 With the example configured above `http://YOURSERVER:9129/repo/archlinux` looks exactly like an Arch pacman mirror.
 For example a request to `http://YOURSERVER:9129/repo/archlinux/core/os/x86_64/openssh-8.2p1-3-x86_64.pkg.tar.zst` will be served with file content from `http://mirror.lty.me/archlinux/core/os/x86_64/openssh-8.2p1-3-x86_64.pkg.tar.zst`
