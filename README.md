@@ -29,8 +29,31 @@ Then start its systemd service: `# systemctl start pacoloco`.
 
 ### Docker
 
-There is a pacoloco docker image available. It can be used with:
-`docker run -p 9129:9129 -v /path/to/config/pacoloco.yaml:/etc/pacoloco.yaml -v /path/to/cache:/var/cache/pacoloco/pkgs pacoloco`. You need to provide a config file and a path to store the package cache.
+There is a pacoloco docker image available. It's not currently published to a registry, so you have to build it yourself.
+```sh
+$ git clone https://github.com/anatol/pacoloco && cd pacoloco
+$ docker build -t pacoloco .
+$ docker run -p 9129:9129 \
+    -v /path/to/config/pacoloco.yaml:/etc/pacoloco.yaml \
+    -v /path/to/cache:/var/cache/pacoloco \
+    pacoloco
+```
+You need to provide paths to store application data.
+
+Alternatively, you can use docker-compose:
+```yaml
+---
+version: "3.8"
+services:
+  pacoloco:
+    container_name: pacoloco
+    build: https://github.com/anatol/pacoloco.git
+    ports:
+      - "9129:9129"
+    volumes:
+      - /path/to/cache:/var/cache/pacoloco
+      - /path/to/config/pacoloco.yaml:/etc/pacoloco.yaml
+```
 
 ## Build from sources
 
