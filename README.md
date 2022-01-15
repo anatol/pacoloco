@@ -24,7 +24,7 @@ You can think of pacoloco as a lazy Arch mirror.
 
 ### Arch systems
 
-Install [pacoloco-git package](https://aur.archlinux.org/packages/pacoloco-git/) from AUR repository.
+Install [pacoloco package](https://archlinux.org/packages/community/x86_64/pacoloco/) from the official Arch repository.
 Then start its systemd service: `# systemctl start pacoloco`.
 
 ### Docker
