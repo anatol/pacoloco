@@ -10,26 +10,36 @@ import (
 )
 
 func updateMirrorlists() {
+	configReposMutex.RLock()
 	for name, _ := range config.Repos {
+		configReposMutex.RUnlock()
 		err := checkAndUpdateMirrorlistRepo(name)
 		if err != nil {
 			log.Fatal(err)
 		}
+		configReposMutex.RLock()
 	}
+	configReposMutex.RUnlock()
 }
 
 func checkAndUpdateMirrorlistRepo(repoName string) error {
+	configReposMutex.RLock()
 	repo, ok := config.Repos[repoName]
+	configReposMutex.RUnlock()
 	if !ok {
 		return fmt.Errorf("repo %v does not exist in config", repoName)
 	}
 	if repo.Mirrorlist != "" {
+		lastMirrorlistCheckMutex.RLock()
 		lastCheck, ok := lastMirrorlistCheck[repo.Mirrorlist]
+		lastMirrorlistCheckMutex.RUnlock()
 		if ok && time.Since(lastCheck) < 5*time.Second {
 			// if there is an entry in the lastMirrorlistCheck and that entry has a distance lower than 5 seconds from now, don't update its mirrorlist
 			return nil
 		}
+		lastMirrorlistCheckMutex.Lock()
 		lastMirrorlistCheck[repo.Mirrorlist] = time.Now()
+		lastMirrorlistCheckMutex.Unlock()
 		err := updateRepoMirrorlist(repoName)
 		if err != nil {
 			return fmt.Errorf("error while updating %v repo mirrorlist: %v", repoName, err)
@@ -39,7 +49,9 @@ func checkAndUpdateMirrorlistRepo(repoName string) error {
 }
 
 func updateRepoMirrorlist(repoName string) error {
+	configReposMutex.RLock()
 	repo, ok := config.Repos[repoName]
+	configReposMutex.RUnlock()
 	if !ok {
 		return fmt.Errorf("repo %v does not exist in config", repoName)
 	}
@@ -47,14 +59,18 @@ func updateRepoMirrorlist(repoName string) error {
 	if err != nil {
 		return err
 	}
+	lastModificationTimeMutex.RLock()
 	lastModified, ok := lastModificationTime[repo.Mirrorlist]
+	lastModificationTimeMutex.RUnlock()
 	fileModTime := fileInfo.ModTime()
 	if ok && fileModTime == lastModified {
 		// no need to update it
 		return nil
 	}
 	// update the last modification time if not ok or whatever
+	lastModificationTimeMutex.Lock()
 	lastModificationTime[repo.Mirrorlist] = fileModTime
+	lastModificationTimeMutex.Unlock()
 
 	// open readonly, it won't change modification time
 	file, err := os.Open(repo.Mirrorlist)
@@ -88,6 +104,8 @@ func updateRepoMirrorlist(repoName string) error {
 		return err
 	}
 	// update config
+	configReposMutex.Lock()
 	config.Repos[repoName] = repo
+	configReposMutex.Unlock()
 	return nil
 }

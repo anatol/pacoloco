@@ -26,8 +26,14 @@ var filenameRegex *regexp.Regexp   // to get the details of a package (arch, ver
 var filenameDBRegex *regexp.Regexp // to get the filename from the db file
 var mirrorlistRegex *regexp.Regexp // to extract the url from a mirrorlist file
 var prefetchDB *gorm.DB
-var lastMirrorlistCheck map[string]time.Time  // use the file path as a key to get when it had been checked for modifications
-var lastModificationTime map[string]time.Time // use the file path as a key to get the last modification time known
+var (
+	lastMirrorlistCheck      map[string]time.Time // use the file path as a key to get when it had been checked for modifications
+	lastMirrorlistCheckMutex = sync.RWMutex{}
+)
+var (
+	lastModificationTime      map[string]time.Time // use the file path as a key to get the last modification time known
+	lastModificationTimeMutex = sync.RWMutex{}
+)
 
 // Accepted formats
 var allowedPackagesExtensions []string
@@ -91,8 +97,12 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	} // shouldn't happen
+	lastMirrorlistCheckMutex.Lock() // should be useless locking & unlocking here
 	lastMirrorlistCheck = make(map[string]time.Time)
+	lastMirrorlistCheckMutex.Unlock()
+	lastModificationTimeMutex.Lock()
 	lastModificationTime = make(map[string]time.Time)
+	lastModificationTimeMutex.Unlock()
 }
 
 func main() {
@@ -169,7 +179,9 @@ func prefetchRequest(url string, optionalCustomPath string) (err error) {
 	repoName := matches[1]
 	path := matches[2]
 	fileName := matches[3]
+	configReposMutex.RLock()
 	repo, ok := config.Repos[repoName]
+	configReposMutex.RUnlock()
 	if !ok {
 		return fmt.Errorf("cannot find repo %s in the config file", repoName)
 	}
@@ -243,7 +255,9 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 	if err := checkAndUpdateMirrorlistRepo(repoName); err != nil { // Check if the relevant mirrorlist is up to date. If not, update it
 		return err
 	}
+	configReposMutex.RLock()
 	repo, ok := config.Repos[repoName]
+	configReposMutex.RUnlock()
 	if !ok {
 		return fmt.Errorf("cannot find repo %s in the config file", repoName)
 	}

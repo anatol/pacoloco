@@ -132,10 +132,12 @@ func getAndDropUnusedPackages(period time.Duration) []Package {
 // Returns unused db files or not existing repos and removes them from the db
 func dropUnusedDBFiles(olderThan time.Time) {
 	prefetchDB.Model(&MirrorDB{}).Unscoped().Where("mirror_dbs.last_time_downloaded < ?", olderThan).Delete(&MirrorDB{})
+	configReposMutex.RLock()
 	repoNames := make([]string, 0, len(config.Repos))
 	for key := range config.Repos {
 		repoNames = append(repoNames, key)
 	}
+	configReposMutex.RUnlock()
 	prefetchDB.Model(&MirrorDB{}).Unscoped().Where("mirror_dbs.repo_name NOT IN ?", repoNames).Delete(&MirrorDB{})
 }
 

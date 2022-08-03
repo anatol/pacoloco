@@ -54,7 +54,9 @@ repos:
 `))
 	config = got
 	updateMirrorlists()
+	lastModificationTimeMutex.RLock()
 	gotModTime, ok := lastModificationTime[config.Repos["archTest"].Mirrorlist]
+	lastModificationTimeMutex.RUnlock()
 	if !ok {
 		t.Errorf("Modification time not recorded")
 	}
@@ -62,7 +64,9 @@ repos:
 	if gotModTime != expectedModTime {
 		t.Errorf("Got %v mod time, expected %v mod time", gotModTime, expectedModTime)
 	}
+	lastMirrorlistCheckMutex.RLock()
 	gotCheckTime, ok := lastMirrorlistCheck[config.Repos["archTest"].Mirrorlist]
+	lastMirrorlistCheckMutex.RUnlock()
 	if !ok {
 		t.Errorf("Check time not recorded")
 	}

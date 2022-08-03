@@ -199,13 +199,16 @@ func cleanPrefetchDB() {
 		// delete mirror links which does not exist on the config file or are invalid
 		mirrors := getAllMirrorsDB()
 		for _, mirror := range mirrors {
+			configReposMutex.RLock()
 			if _, exists := config.Repos[mirror.RepoName]; exists {
+				configReposMutex.RUnlock()
 				if strings.Index(mirror.URL, "/repo/") != 0 {
 					log.Printf("warning: deleting %v link due to migrating to a newer version of pacoloco. Simply do 'pacman -Sy' on repo %v to fix the prefetching.", mirror.URL, mirror.RepoName)
 					deleteMirrorDBFromDB(mirror)
 				}
 
 			} else {
+				configReposMutex.RUnlock()
 				// there is no repo with that name, I delete the mirrorDB entry
 				log.Printf("Deleting %v, repo %v does not exist", mirror.URL, mirror.RepoName)
 				deleteMirrorDBFromDB(mirror)

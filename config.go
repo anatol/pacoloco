@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os/user"
+	"sync"
 
 	"github.com/gorhill/cronexpr"
 	"golang.org/x/sys/unix"
@@ -38,6 +39,7 @@ type Config struct {
 }
 
 var config *Config
+var configReposMutex = sync.RWMutex{}
 
 func parseConfig(raw []byte) *Config {
 	var result = Config{
