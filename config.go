@@ -35,6 +35,7 @@ type Config struct {
 	DownloadTimeout int             `yaml:"download_timeout"`
 	Prefetch        *RefreshPeriod  `yaml:"prefetch"`
 	HttpProxy       string          `yaml:"http_proxy"`
+	UserAgent       string          `yaml:"user_agent"`
 }
 
 var config *Config

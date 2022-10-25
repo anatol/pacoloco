@@ -28,6 +28,7 @@ var mirrorlistRegex *regexp.Regexp // to extract the url from a mirrorlist file
 var prefetchDB *gorm.DB
 var lastMirrorlistCheck map[string]time.Time  // use the file path as a key to get when it had been checked for modifications
 var lastModificationTime map[string]time.Time // use the file path as a key to get the last modification time known
+var userAgent string
 
 // Accepted formats
 var allowedPackagesExtensions []string
@@ -123,6 +124,11 @@ func main() {
 			log.Fatal(err)
 		}
 		http.DefaultTransport = &http.Transport{Proxy: http.ProxyURL(proxyUrl)}
+	}
+
+	userAgent = "Pacoloco/1.2"
+	if config.UserAgent != "" {
+		userAgent = config.UserAgent
 	}
 
 	listenAddr := fmt.Sprintf(":%d", config.Port)
@@ -348,6 +354,7 @@ func downloadFile(url string, filePath string, ifModifiedSince time.Time) (serve
 	// some servers return compressed data without Content-Length header info
 	// disable compression as it useless for package data
 	req.Header.Add("Accept-Encoding", "identity")
+	req.Header.Set("User-Agent", userAgent)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -418,6 +425,7 @@ func downloadFileAndSend(url string, filePath string, ifModifiedSince time.Time,
 	// some servers return compressed data without Content-Length header info
 	// disable compression as it useless for package data
 	req.Header.Add("Accept-Encoding", "identity")
+	req.Header.Set("User-Agent", userAgent)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
