@@ -1,0 +1,38 @@
+---
+name: Build and push to ghcr.io
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-go@v3
+        with:
+          go-version: '^1.17.13'
+
+      - name: Run tests
+        run: go test
+
+      - name: Build
+        run: go build
+
+  build:
+    runs-on: ubuntu-latest
+    needs:
+      - test
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: macbre/push-to-ghcr@master
+        if: ${{ github.ref == 'refs/heads/main' }}
+        with:
+          image_name: ${{ github.repository }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # tag: # TODO: publish release tags
