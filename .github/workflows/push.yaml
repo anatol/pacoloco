@@ -31,7 +31,7 @@ jobs:
       - uses: actions/checkout@v3
 
       - uses: macbre/push-to-ghcr@master
-        if: ${{ github.ref == 'refs/heads/main' }}
+        if: ${{ github.ref == 'refs/heads/master' }}
         with:
           image_name: ${{ github.repository }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
