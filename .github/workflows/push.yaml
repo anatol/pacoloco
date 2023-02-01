@@ -37,7 +37,7 @@ jobs:
         with:
           image_name: ${{ github.repository }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          tag: latest
+          image_tag: latest
 
   publish_release:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -50,9 +50,9 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: publish master to latest
+      - name: publish release to tag
         uses: macbre/push-to-ghcr@master
         with:
           image_name: ${{ github.repository }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ github.ref_name}}
+          image_tag: ${{ github.ref_name }}
