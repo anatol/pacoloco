@@ -22,7 +22,9 @@ jobs:
       - name: Build
         run: go build
 
-  build:
+  publish_latest:
+    if: github.ref == 'refs/heads/master'
+
     runs-on: ubuntu-latest
     needs:
       - test
@@ -30,9 +32,27 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - uses: macbre/push-to-ghcr@master
-        if: ${{ github.ref == 'refs/heads/master' }}
+      - name: publish master to latest
+        uses: macbre/push-to-ghcr@master
         with:
           image_name: ${{ github.repository }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          # tag: # TODO: publish release tags
+          tag: latest
+
+  publish_release:
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    runs-on: ubuntu-latest
+
+    needs:
+      - test
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: publish master to latest
+        uses: macbre/push-to-ghcr@master
+        with:
+          image_name: ${{ github.repository }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.ref_name}}
