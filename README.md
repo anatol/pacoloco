@@ -29,16 +29,30 @@ Then start its systemd service: `# systemctl start pacoloco`.
 
 ### Docker
 
-There is a pacoloco docker image available. It's not currently published to a registry, so you have to build it yourself.
+Pacoloco can be used with docker.
+
+You can get a prebuilt image from GitHub's [container registry](https://github.com/anatol/pacoloco/pkgs/container/pacoloco) (see also sidebar).
+Currently only amd64 is supported.
+```sh
+docker pull ghcr.io/anatol/pacoloco
+```
+Available tags are: `latest` = git master and any git tags.
+
+
+You can also build it yourself:
 ```sh
 $ git clone https://github.com/anatol/pacoloco && cd pacoloco
-$ docker build -t pacoloco .
+$ docker build -t ghcr.io/anatol/pacoloco .
+```
+
+Run it like this:
+```sh
 $ docker run -p 9129:9129 \
     -v /path/to/config/pacoloco.yaml:/etc/pacoloco.yaml \
     -v /path/to/cache:/var/cache/pacoloco \
-    pacoloco
+    ghcr.io/anatol/pacoloco
 ```
-You need to provide paths to store application data.
+You need to provide paths or volumes to store application data.
 
 Alternatively, you can use docker-compose:
 ```yaml
@@ -47,7 +61,10 @@ version: "3.8"
 services:
   pacoloco:
     container_name: pacoloco
-    build: https://github.com/anatol/pacoloco.git
+#   to pull the image from github's registry:
+    image: ghcr.io/anatol/pacoloco
+#   or replace it for for self-building with:
+#    build: https://github.com/anatol/pacoloco.git
     ports:
       - "9129:9129"
     volumes:
