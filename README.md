@@ -70,6 +70,7 @@ services:
     volumes:
       - /path/to/cache:/var/cache/pacoloco
       - /path/to/config/pacoloco.yaml:/etc/pacoloco.yaml
+    restart: unless-stopped
 ```
 
 ## Build from sources
