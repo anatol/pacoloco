@@ -36,6 +36,7 @@ type Config struct {
 	Prefetch        *RefreshPeriod  `yaml:"prefetch"`
 	HttpProxy       string          `yaml:"http_proxy"`
 	UserAgent       string          `yaml:"user_agent"`
+	LogTimestamp    bool            `yaml:"set_timestamp_to_logs"`
 }
 
 var config *Config

@@ -93,13 +93,25 @@ func createPrefetchDB() {
 
 func getDBConnection() (*gorm.DB, error) {
 	dbPath := path.Join(config.CacheDir, DefaultDBName)
-	newLogger := logger.New(
-		log.New(os.Stdout, "\r\n", log.LstdFlags), // io writer
-		logger.Config{
-			SlowThreshold:             time.Second, // Slow SQL threshold
-			IgnoreRecordNotFoundError: true,        // Ignore ErrRecordNotFound error for logger
-		},
-	)
+	if config == nil {
+		return nil, fmt.Errorf("Config have not been parsed yet")
+	}
+	var newLogger logger.Interface
+	if config.LogTimestamp == true {
+		newLogger = logger.New(
+			log.New(os.Stdout, "\r\n", log.LstdFlags), // io writer
+			logger.Config{
+				SlowThreshold:             time.Second, // Slow SQL threshold
+				IgnoreRecordNotFoundError: true,        // Ignore ErrRecordNotFound error for logger
+			})
+	} else {
+		newLogger = logger.New(
+			log.New(os.Stdout, "\r\n", 0), // io writer
+			logger.Config{
+				SlowThreshold:             time.Second, // Slow SQL threshold
+				IgnoreRecordNotFoundError: true,        // Ignore ErrRecordNotFound error for logger
+			})
+	}
 
 	return gorm.Open(sqlite.Open(dbPath), &gorm.Config{Logger: newLogger})
 }
