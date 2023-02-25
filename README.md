@@ -70,6 +70,9 @@ services:
     volumes:
       - /path/to/cache:/var/cache/pacoloco
       - /path/to/config/pacoloco.yaml:/etc/pacoloco.yaml
+#   to set time zone within the container for cron and log timestamps:
+#    environement:
+#      - TZ=Europe/Berlin
 ```
 
 ## Build from sources
