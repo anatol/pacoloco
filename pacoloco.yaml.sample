@@ -2,6 +2,8 @@
 # port: 9129
 download_timeout: 3600 # downloads will timeout if not completed after 3600 sec, 0 to disable timeout
 purge_files_after: 2592000 # purge file after 30 days
+# set_timestamp_to_logs: true # uncomment to add timestamp, useful if pacoloco is being ran through docker
+
 repos:
   archlinux:
     urls:

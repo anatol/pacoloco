@@ -106,6 +106,9 @@ func main() {
 		log.Fatal(err)
 	}
 	config = parseConfig(yaml)
+	if config.LogTimestamp == true {
+		log.SetFlags(log.LstdFlags)
+	}
 	updateMirrorlists()
 	if config.Prefetch != nil {
 		prefetchTicker := setupPrefetchTicker()
