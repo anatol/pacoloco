@@ -10,6 +10,8 @@ RUN go build -ldflags="-s -w"
 
 FROM alpine:3.13
 
+RUN apk add tzdata
+
 WORKDIR /pacoloco
 
 COPY --from=build /build/pacoloco .
