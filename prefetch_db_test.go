@@ -241,7 +241,10 @@ func TestGetPkgsToUpdate(t *testing.T) {
 	if db := prefetchDB.Save(&repoPkg); db.Error != nil {
 		t.Error(db.Error)
 	}
-	got := getPkgsToUpdate()
+	got, err := getPkgsToUpdate()
+	if err != nil {
+		t.Fatal(err)
+	}
 	want := []PkgToUpdate{PkgToUpdate{PackageName: "webkit", RepoName: "foo", Arch: "x86_64", DownloadURL: "/repo/foo/webkit-2.4.1-1-x86_64", FileExt: ".pkg.tar.zst"}}
 	if !cmp.Equal(got, want) {
 		t.Errorf("\ngot  %v\nwant %v", got, want)

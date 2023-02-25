@@ -202,18 +202,18 @@ func getPkgToUpdateDownloadURLs(p PkgToUpdate) []string {
 }
 
 // returns a list of packages which should be prefetched
-func getPkgsToUpdate() []PkgToUpdate {
+func getPkgsToUpdate() ([]PkgToUpdate, error) {
 	rows, err := prefetchDB.Model(&Package{}).Joins("inner join mirror_packages on mirror_packages.package_name = packages.package_name AND mirror_packages.arch = packages.arch AND mirror_packages.repo_name = packages.repo_name AND mirror_packages.version <> packages.version").Select("packages.package_name,packages.arch,packages.repo_name,mirror_packages.download_url,mirror_packages.file_ext").Rows()
-	if err != nil {
-		log.Fatal(err)
-	}
 	var pkgs []PkgToUpdate
+	if err != nil {
+		return pkgs, err
+	}
 	for rows.Next() {
 		var pkg PkgToUpdate
 		rows.Scan(&pkg.PackageName, &pkg.Arch, &pkg.RepoName, &pkg.DownloadURL, &pkg.FileExt)
 		pkgs = append(pkgs, pkg)
 	}
-	return pkgs
+	return pkgs, nil
 }
 
 // add a pacoloco url of a DB in a db. This urls are used to download afterwards the db to know which packages should be prefetched.
