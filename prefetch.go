@@ -224,7 +224,11 @@ func cleanPrefetchDB() {
 func prefetchAllPkgs() {
 	updateMirrorsDbs()
 	defer deleteMirrorPkgsTable()
-	pkgs := getPkgsToUpdate()
+	pkgs, err := getPkgsToUpdate()
+	if err != nil {
+		log.Printf("Prefetching failed: %v. Are you sure you had something to prefetch?", err)
+		return
+	}
 	for _, p := range pkgs {
 		pkg := getPackage(p.PackageName, p.Arch, p.RepoName)
 		urls := getPkgToUpdateDownloadURLs(p)
