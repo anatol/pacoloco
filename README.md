@@ -73,6 +73,7 @@ services:
 #   to set time zone within the container for cron and log timestamps:
 #    environement:
 #      - TZ=Europe/Berlin
+    restart: unless-stopped
 ```
 
 ## Build from sources
