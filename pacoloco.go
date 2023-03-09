@@ -274,33 +274,37 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 
 	filePath := filepath.Join(cachePath, fileName)
 	_, err := os.Stat(filePath)
-	noFile := err != nil
+	fileExists := err == nil
 
 	fileMutex, currentlyDownloading := downloadingFiles[mutexKey]
+
 	if currentlyDownloading {
-		// wait for the download to finish
+		// wait for the download to finish, then serve the file
 		downloadingFilesMutex.Unlock()
-		// the downloading thread has the file lock so this blocks until it finishes
-		fileMutex.Lock()
+		fileMutex.Lock() // the downloading thread holds the file lock, so this blocks until it finishes
 		fileMutex.Unlock()
-	} else if !noFile && !forceCheckAtServer(fileName) {
-		downloadingFilesMutex.Unlock()
-	} else {
-		// download the file
-		fileMutex = &sync.Mutex{}
-		downloadingFiles[mutexKey] = fileMutex
-		fileMutex.Lock()
-		defer func() {
-			fileMutex.Unlock()
-			downloadingFilesMutex.Lock()
-			delete(downloadingFiles, mutexKey)
-			downloadingFilesMutex.Unlock()
-		}()
-		downloadingFilesMutex.Unlock()
-		return downloadAndServe(w, req, repoName, path, fileName, filePath)
+		return serveFromCache(w, req, repoName, fileName, filePath)
 	}
 
-	return serveFromCache(w, req, repoName, fileName, filePath)
+	if fileExists && !forceCheckAtServer(fileName) {
+		// the cached file is finished downloading, so serve it
+		downloadingFilesMutex.Unlock()
+		return serveFromCache(w, req, repoName, fileName, filePath)
+	}
+
+	// download the file
+	fileMutex = &sync.Mutex{}
+	downloadingFiles[mutexKey] = fileMutex
+	fileMutex.Lock()
+	defer func() {
+		fileMutex.Unlock()
+		downloadingFilesMutex.Lock()
+		delete(downloadingFiles, mutexKey)
+		downloadingFilesMutex.Unlock()
+	}()
+
+	downloadingFilesMutex.Unlock()
+	return downloadAndServe(w, req, repoName, path, fileName, filePath)
 }
 
 func downloadAndServe(w http.ResponseWriter, req *http.Request, repoName, path, fileName, filePath string) error {
