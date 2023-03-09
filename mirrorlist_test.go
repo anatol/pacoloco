@@ -55,12 +55,12 @@ repos:
 `))
 	config = got
 	updateMirrorlists()
-	gotModTime := config.Repos["archTest"].lastModificationTime
+	gotModTime := config.Repos["archTest"].LastModificationTime
 	expectedModTime := fileInfo.ModTime()
 	if gotModTime != expectedModTime {
 		t.Errorf("Got %v mod time, expected %v mod time", gotModTime, expectedModTime)
 	}
-	gotCheckTime := config.Repos["archTest"].lastMirrorlistCheck
+	gotCheckTime := config.Repos["archTest"].LastMirrorlistCheck
 	if time.Since(gotCheckTime) > 3*time.Second {
 		t.Errorf("Got %v check time, expected %v check time", gotCheckTime, time.Now())
 	}
@@ -78,12 +78,14 @@ repos:
 					`https://tooManyTests.com/archlinux/`,
 					`http://another.test.co.uk/archlinux/`,
 				},
+				LastModificationTime: gotModTime,
+				LastMirrorlistCheck:  gotCheckTime,
 			},
 		},
 		PurgeFilesAfter: 2592000,
 		DownloadTimeout: 200,
 	}
-	if !cmp.Equal(*got, *want, cmpopts.IgnoreUnexported(Repo{})) {
+	if !cmp.Equal(*got, *want, cmpopts.IgnoreFields(Repo{}, "Mutex")) {
 		t.Errorf("got %v, want %v", *got, *want)
 	}
 
@@ -93,7 +95,7 @@ repos:
 	}
 	updateMirrorlists()
 	got = config
-	if !cmp.Equal(*got, *want, cmpopts.IgnoreUnexported(Repo{})) {
+	if !cmp.Equal(*got, *want, cmpopts.IgnoreFields(Repo{}, "Mutex")) {
 		t.Errorf("got %v, want %v", *got, *want)
 	}
 }

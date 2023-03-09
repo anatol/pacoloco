@@ -20,15 +20,15 @@ func updateMirrorlists() {
 
 func checkAndUpdateMirrorlistRepo(repoName string, repo *Repo) error {
 	if repo.Mirrorlist != "" {
-		repo.mutex.Lock()
-		defer repo.mutex.Unlock()
+		repo.Mutex.Lock()
+		defer repo.Mutex.Unlock()
 
-		if time.Since(repo.lastMirrorlistCheck) < 5*time.Second {
+		if time.Since(repo.LastMirrorlistCheck) < 5*time.Second {
 			// if there is an entry in the lastMirrorlistCheck and that entry has a distance lower than 5 seconds from now, don't update its mirrorlist
 			return nil
 		}
 
-		repo.lastMirrorlistCheck = time.Now()
+		repo.LastMirrorlistCheck = time.Now()
 		err := updateRepoMirrorlist(repoName, repo)
 		if err != nil {
 			return fmt.Errorf("error while updating %v repo mirrorlist: %v", repoName, err)
@@ -44,11 +44,11 @@ func updateRepoMirrorlist(repoName string, repo *Repo) error {
 	}
 
 	fileModTime := fileInfo.ModTime()
-	if fileModTime == repo.lastModificationTime {
+	if fileModTime == repo.LastModificationTime {
 		return nil
 	}
 
-	repo.lastModificationTime = fileModTime
+	repo.LastModificationTime = fileModTime
 
 	// open readonly, it won't change modification time
 	file, err := os.Open(repo.Mirrorlist)
