@@ -3,6 +3,8 @@ package main
 import (
 	"log"
 	"os/user"
+	"sync"
+	"time"
 
 	"github.com/gorhill/cronexpr"
 	"golang.org/x/sys/unix"
@@ -16,9 +18,12 @@ const DefaultTTLUnupdated = 200
 const DefaultDBName = "sqlite-pkg-cache.db"
 
 type Repo struct {
-	URL        string   `yaml:"url"`
-	URLs       []string `yaml:"urls"`
-	Mirrorlist string   `yaml:"mirrorlist"`
+	URL                  string   `yaml:"url"`
+	URLs                 []string `yaml:"urls"`
+	Mirrorlist           string   `yaml:"mirrorlist"`
+	mutex                sync.RWMutex
+	lastMirrorlistCheck  time.Time
+	lastModificationTime time.Time
 }
 
 type RefreshPeriod struct {
@@ -28,15 +33,15 @@ type RefreshPeriod struct {
 }
 
 type Config struct {
-	CacheDir        string          `yaml:"cache_dir"`
-	Port            int             `yaml:"port"`
-	Repos           map[string]Repo `yaml:"repos,omitempty"`
-	PurgeFilesAfter int             `yaml:"purge_files_after"`
-	DownloadTimeout int             `yaml:"download_timeout"`
-	Prefetch        *RefreshPeriod  `yaml:"prefetch"`
-	HttpProxy       string          `yaml:"http_proxy"`
-	UserAgent       string          `yaml:"user_agent"`
-	LogTimestamp    bool            `yaml:"set_timestamp_to_logs"`
+	CacheDir        string           `yaml:"cache_dir"`
+	Port            int              `yaml:"port"`
+	Repos           map[string]*Repo `yaml:"repos,omitempty"`
+	PurgeFilesAfter int              `yaml:"purge_files_after"`
+	DownloadTimeout int              `yaml:"download_timeout"`
+	Prefetch        *RefreshPeriod   `yaml:"prefetch"`
+	HttpProxy       string           `yaml:"http_proxy"`
+	UserAgent       string           `yaml:"user_agent"`
+	LogTimestamp    bool             `yaml:"set_timestamp_to_logs"`
 }
 
 var config *Config

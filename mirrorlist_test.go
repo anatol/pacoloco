@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
 func TestUpdateRepoMirrorlist(t *testing.T) {
@@ -54,26 +55,20 @@ repos:
 `))
 	config = got
 	updateMirrorlists()
-	gotModTime, ok := lastModificationTime[config.Repos["archTest"].Mirrorlist]
-	if !ok {
-		t.Errorf("Modification time not recorded")
-	}
+	gotModTime := config.Repos["archTest"].lastModificationTime
 	expectedModTime := fileInfo.ModTime()
 	if gotModTime != expectedModTime {
 		t.Errorf("Got %v mod time, expected %v mod time", gotModTime, expectedModTime)
 	}
-	gotCheckTime, ok := lastMirrorlistCheck[config.Repos["archTest"].Mirrorlist]
-	if !ok {
-		t.Errorf("Check time not recorded")
-	}
+	gotCheckTime := config.Repos["archTest"].lastMirrorlistCheck
 	if time.Since(gotCheckTime) > 3*time.Second {
 		t.Errorf("Got %v check time, expected %v check time", gotCheckTime, time.Now())
 	}
 	want := &Config{
 		CacheDir: temp,
 		Port:     9139,
-		Repos: map[string]Repo{
-			"archTest": Repo{
+		Repos: map[string]*Repo{
+			"archTest": &Repo{
 				Mirrorlist: tmpMirrorfile,
 				URLs: []string{`http://mirror.sample.ca/archlinux/`,
 					`https://a.ab.net/archlinux/`,
@@ -88,7 +83,7 @@ repos:
 		PurgeFilesAfter: 2592000,
 		DownloadTimeout: 200,
 	}
-	if !cmp.Equal(*got, *want) {
+	if !cmp.Equal(*got, *want, cmpopts.IgnoreUnexported(Repo{})) {
 		t.Errorf("got %v, want %v", *got, *want)
 	}
 
@@ -98,7 +93,7 @@ repos:
 	}
 	updateMirrorlists()
 	got = config
-	if !cmp.Equal(*got, *want) {
+	if !cmp.Equal(*got, *want, cmpopts.IgnoreUnexported(Repo{})) {
 		t.Errorf("got %v, want %v", *got, *want)
 	}
 }

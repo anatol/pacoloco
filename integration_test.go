@@ -43,7 +43,7 @@ func TestPacolocoIntegrationWithPrefetching(t *testing.T) {
 		Port:            -1,
 		PurgeFilesAfter: -1,
 		DownloadTimeout: 999,
-		Repos:           make(map[string]Repo),
+		Repos:           make(map[string]*Repo),
 		Prefetch:        &RefreshPeriod{Cron: "0 0 " + fmt.Sprint(notInvokingPrefetchTime.Hour()) + " ? * 1#1 *"},
 	}
 	setupPrefetch()
@@ -88,7 +88,7 @@ func TestPacolocoIntegration(t *testing.T) {
 		Port:            -1,
 		PurgeFilesAfter: -1,
 		DownloadTimeout: 999,
-		Repos:           make(map[string]Repo),
+		Repos:           make(map[string]*Repo),
 		Prefetch:        nil,
 	}
 
@@ -135,7 +135,7 @@ func testRequestNonExistingDb(t *testing.T) {
 
 func testRequestExistingRepo(t *testing.T) {
 	// Requesting existing repo
-	config.Repos["repo1"] = Repo{}
+	config.Repos["repo1"] = &Repo{}
 	defer delete(config.Repos, "repo1")
 
 	req := httptest.NewRequest("GET", pacolocoURL+"/repo/repo1/test.db", nil)
@@ -154,7 +154,7 @@ func testRequestExistingRepo(t *testing.T) {
 
 func testRequestExistingRepoWithDb(t *testing.T) {
 	// Requesting existing repo
-	config.Repos["repo2"] = Repo{
+	config.Repos["repo2"] = &Repo{
 		URL: mirrorURL + "/mirror2",
 	}
 	defer delete(config.Repos, "repo2")
@@ -262,7 +262,7 @@ func testRequestExistingRepoWithDb(t *testing.T) {
 
 func testRequestPackageFile(t *testing.T) {
 	// Requesting existing repo
-	config.Repos["repo3"] = Repo{
+	config.Repos["repo3"] = &Repo{
 		URL: mirrorURL + "/mirror3",
 	}
 	defer delete(config.Repos, "repo3")
@@ -362,7 +362,7 @@ func testRequestPackageFile(t *testing.T) {
 }
 
 func testFailover(t *testing.T) {
-	config.Repos["failover"] = Repo{
+	config.Repos["failover"] = &Repo{
 		URLs: []string{mirrorURL + "/no-mirror", mirrorURL + "/mirror-failover"},
 	}
 	defer delete(config.Repos, "failover")

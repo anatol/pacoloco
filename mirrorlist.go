@@ -10,27 +10,26 @@ import (
 )
 
 func updateMirrorlists() {
-	for name, _ := range config.Repos {
-		err := checkAndUpdateMirrorlistRepo(name)
+	for name, repo := range config.Repos {
+		err := checkAndUpdateMirrorlistRepo(name, repo)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 }
 
-func checkAndUpdateMirrorlistRepo(repoName string) error {
-	repo, ok := config.Repos[repoName]
-	if !ok {
-		return fmt.Errorf("repo %v does not exist in config", repoName)
-	}
+func checkAndUpdateMirrorlistRepo(repoName string, repo *Repo) error {
 	if repo.Mirrorlist != "" {
-		lastCheck, ok := lastMirrorlistCheck[repo.Mirrorlist]
-		if ok && time.Since(lastCheck) < 5*time.Second {
+		repo.mutex.Lock()
+		defer repo.mutex.Unlock()
+
+		if time.Since(repo.lastMirrorlistCheck) < 5*time.Second {
 			// if there is an entry in the lastMirrorlistCheck and that entry has a distance lower than 5 seconds from now, don't update its mirrorlist
 			return nil
 		}
-		lastMirrorlistCheck[repo.Mirrorlist] = time.Now()
-		err := updateRepoMirrorlist(repoName)
+
+		repo.lastMirrorlistCheck = time.Now()
+		err := updateRepoMirrorlist(repoName, repo)
 		if err != nil {
 			return fmt.Errorf("error while updating %v repo mirrorlist: %v", repoName, err)
 		}
@@ -38,23 +37,12 @@ func checkAndUpdateMirrorlistRepo(repoName string) error {
 	return nil
 }
 
-func updateRepoMirrorlist(repoName string) error {
-	repo, ok := config.Repos[repoName]
-	if !ok {
-		return fmt.Errorf("repo %v does not exist in config", repoName)
-	}
+func updateRepoMirrorlist(repoName string, repo *Repo) error {
 	fileInfo, err := os.Stat(repo.Mirrorlist)
 	if err != nil {
 		return err
 	}
-	lastModified, ok := lastModificationTime[repo.Mirrorlist]
-	fileModTime := fileInfo.ModTime()
-	if ok && fileModTime == lastModified {
-		// no need to update it
-		return nil
-	}
-	// update the last modification time if not ok or whatever
-	lastModificationTime[repo.Mirrorlist] = fileModTime
+	repo.lastModificationTime = fileInfo.ModTime()
 
 	// open readonly, it won't change modification time
 	file, err := os.Open(repo.Mirrorlist)
@@ -84,10 +72,5 @@ func updateRepoMirrorlist(repoName string) error {
 		return fmt.Errorf("mirrorlist for repo %v is either empty or isn't a mirrorlist file", repoName)
 	}
 
-	if err := scanner.Err(); err != nil {
-		return err
-	}
-	// update config
-	config.Repos[repoName] = repo
-	return nil
+	return scanner.Err()
 }

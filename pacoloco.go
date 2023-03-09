@@ -26,8 +26,6 @@ var filenameRegex *regexp.Regexp   // to get the details of a package (arch, ver
 var filenameDBRegex *regexp.Regexp // to get the filename from the db file
 var mirrorlistRegex *regexp.Regexp // to extract the url from a mirrorlist file
 var prefetchDB *gorm.DB
-var lastMirrorlistCheck map[string]time.Time  // use the file path as a key to get when it had been checked for modifications
-var lastModificationTime map[string]time.Time // use the file path as a key to get the last modification time known
 var userAgent string
 
 // Accepted formats
@@ -92,8 +90,6 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	} // shouldn't happen
-	lastMirrorlistCheck = make(map[string]time.Time)
-	lastModificationTime = make(map[string]time.Time)
 }
 
 func main() {
@@ -249,12 +245,13 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 	repoName := matches[1]
 	path := matches[2]
 	fileName := matches[3]
-	if err := checkAndUpdateMirrorlistRepo(repoName); err != nil { // Check if the relevant mirrorlist is up to date. If not, update it
-		return err
-	}
 	repo, ok := config.Repos[repoName]
 	if !ok {
 		return fmt.Errorf("cannot find repo %s in the config file", repoName)
+	}
+	// Check if the relevant mirrorlist is up to date. If not, update it
+	if err := checkAndUpdateMirrorlistRepo(repoName, repo); err != nil {
+		return err
 	}
 
 	// create cache directory if needed

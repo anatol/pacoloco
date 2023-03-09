@@ -48,8 +48,8 @@ repos:
 	want := &Config{
 		CacheDir: `/tmp`,
 		Port:     9139,
-		Repos: map[string]Repo{
-			"archlinux": Repo{
+		Repos: map[string]*Repo{
+			"archlinux": &Repo{
 				URL: "http://mirrors.kernel.org/archlinux",
 			},
 		},
@@ -57,7 +57,7 @@ repos:
 		DownloadTimeout: 200,
 		Prefetch:        &RefreshPeriod{Cron: "0 0 3 * * * *", TTLUnaccessed: 5, TTLUnupdated: 200},
 	}
-	if !cmp.Equal(*got, *want, cmpopts.IgnoreFields(Config{}, "Prefetch")) {
+	if !cmp.Equal(*got, *want, cmpopts.IgnoreFields(Config{}, "Prefetch"), cmpopts.IgnoreUnexported(Repo{})) {
 		t.Errorf("got %v, want %v", *got, *want)
 	}
 	gotR := *(*got).Prefetch
@@ -79,8 +79,8 @@ repos:
 	want := &Config{
 		CacheDir: `/tmp`,
 		Port:     9129,
-		Repos: map[string]Repo{
-			"archlinux": Repo{
+		Repos: map[string]*Repo{
+			"archlinux": &Repo{
 				URL: "http://mirrors.kernel.org/archlinux",
 			},
 		},
@@ -105,8 +105,8 @@ repos:
 	want := &Config{
 		CacheDir: `/tmp`,
 		Port:     9129,
-		Repos: map[string]Repo{
-			"archlinux": Repo{
+		Repos: map[string]*Repo{
+			"archlinux": &Repo{
 				URL: "http://mirrors.kernel.org/archlinux",
 			},
 		},
@@ -145,8 +145,8 @@ repos:
 	want := &Config{
 		CacheDir: temp,
 		Port:     9139,
-		Repos: map[string]Repo{
-			"archlinux": Repo{
+		Repos: map[string]*Repo{
+			"archlinux": &Repo{
 				Mirrorlist: tmpfile,
 			},
 		},
@@ -154,7 +154,7 @@ repos:
 		DownloadTimeout: 200,
 		Prefetch:        &RefreshPeriod{Cron: "0 0 3 * * * *", TTLUnaccessed: 5, TTLUnupdated: 200},
 	}
-	if !cmp.Equal(*got, *want, cmpopts.IgnoreFields(Config{}, "Prefetch")) {
+	if !cmp.Equal(*got, *want, cmpopts.IgnoreFields(Config{}, "Prefetch"), cmpopts.IgnoreUnexported(Repo{})) {
 		t.Errorf("got %v, want %v", *got, *want)
 	}
 	gotR := *(*got).Prefetch
