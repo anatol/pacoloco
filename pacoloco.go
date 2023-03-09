@@ -240,6 +240,14 @@ func prefetchRequest(url string, optionalCustomPath string) (err error) {
 	}
 }
 
+func serveFromCache(w http.ResponseWriter, req *http.Request, repoName, fileName, filePath string) error {
+	err := sendCachedFile(w, req, fileName, filePath)
+	if err == nil && config.Prefetch != nil && !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
+		updateDBRequestedFile(repoName, fileName) // update info for prefetching
+	}
+	return err
+}
+
 func handleRequest(w http.ResponseWriter, req *http.Request) error {
 	urlPath := req.URL.Path
 	matches := pathRegex.FindStringSubmatch(urlPath)
@@ -252,10 +260,6 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 	if err := checkAndUpdateMirrorlistRepo(repoName); err != nil { // Check if the relevant mirrorlist is up to date. If not, update it
 		return err
 	}
-	repo, ok := config.Repos[repoName]
-	if !ok {
-		return fmt.Errorf("cannot find repo %s in the config file", repoName)
-	}
 
 	// create cache directory if needed
 	cachePath := filepath.Join(config.CacheDir, "pkgs", repoName)
@@ -265,20 +269,26 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 		}
 	}
 
-	filePath := filepath.Join(cachePath, fileName)
-	stat, err := os.Stat(filePath)
-	noFile := err != nil
-	requestFromServer := noFile || forceCheckAtServer(fileName)
+	mutexKey := repoName + ":" + fileName
+	downloadingFilesMutex.Lock()
 
-	if requestFromServer {
-		mutexKey := repoName + ":" + fileName
-		downloadingFilesMutex.Lock()
-		fileMutex, ok := downloadingFiles[mutexKey]
-		if !ok {
-			fileMutex = &sync.Mutex{}
-			downloadingFiles[mutexKey] = fileMutex
-		}
+	filePath := filepath.Join(cachePath, fileName)
+	_, err := os.Stat(filePath)
+	noFile := err != nil
+
+	fileMutex, currentlyDownloading := downloadingFiles[mutexKey]
+	if currentlyDownloading {
+		// wait for the download to finish
 		downloadingFilesMutex.Unlock()
+		// the downloading thread has the file lock so this blocks until it finishes
+		fileMutex.Lock()
+		fileMutex.Unlock()
+	} else if !noFile && !forceCheckAtServer(fileName) {
+		downloadingFilesMutex.Unlock()
+	} else {
+		// download the file
+		fileMutex = &sync.Mutex{}
+		downloadingFiles[mutexKey] = fileMutex
 		fileMutex.Lock()
 		defer func() {
 			fileMutex.Unlock()
@@ -286,50 +296,50 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 			delete(downloadingFiles, mutexKey)
 			downloadingFilesMutex.Unlock()
 		}()
+		downloadingFilesMutex.Unlock()
+		return downloadAndServe(w, req, repoName, path, fileName, filePath)
+	}
 
-		// refresh the data in case if the file has been download while we were waiting for the mutex
-		stat, err = os.Stat(filePath)
-		noFile = err != nil
-		requestFromServer = noFile || forceCheckAtServer(fileName)
+	return serveFromCache(w, req, repoName, fileName, filePath)
+}
+
+func downloadAndServe(w http.ResponseWriter, req *http.Request, repoName, path, fileName, filePath string) error {
+	repo, ok := config.Repos[repoName]
+	if !ok {
+		return fmt.Errorf("cannot find repo %s in the config file", repoName)
 	}
 
 	var served bool
-	if requestFromServer {
-		ifLater, _ := http.ParseTime(req.Header.Get("If-Modified-Since"))
-		if noFile {
-			// ignore If-Modified-Since and download file if it does not exist in the cache
-			ifLater = time.Time{}
-		} else if stat.ModTime().After(ifLater) {
-			ifLater = stat.ModTime()
-		}
+	stat, err := os.Stat(filePath)
+	ifLater, _ := http.ParseTime(req.Header.Get("If-Modified-Since"))
+	if err != nil { // file doesn't exist
+		// ignore If-Modified-Since and download file if it does not exist in the cache
+		ifLater = time.Time{}
+	} else if stat.ModTime().After(ifLater) {
+		ifLater = stat.ModTime()
+	}
 
-		if repo.URL != "" {
-			served, err = downloadFileAndSend(repo.URL+path+"/"+fileName, filePath, ifLater, w)
-			if err == nil && config.Prefetch != nil && !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
+	var urls []string
+	if repo.URL != "" {
+		urls = []string{repo.URL}
+	} else {
+		urls = repo.URLs
+	}
+
+	for _, url := range urls {
+		served, err = downloadFileAndSend(url+path+"/"+fileName, filePath, ifLater, w)
+		if err == nil {
+			if config.Prefetch != nil && !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
 				updateDBRequestedFile(repoName, fileName) // update info for prefetching
 			} else if err == nil && config.Prefetch != nil && strings.HasSuffix(fileName, ".db") {
 				updateDBRequestedDB(repoName, path, fileName)
 			}
-		} else {
-			for _, url := range repo.URLs {
-				served, err = downloadFileAndSend(url+path+"/"+fileName, filePath, ifLater, w)
-				if err == nil {
-					if config.Prefetch != nil && !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
-						updateDBRequestedFile(repoName, fileName) // update info for prefetching
-					} else if err == nil && config.Prefetch != nil && strings.HasSuffix(fileName, ".db") {
-						updateDBRequestedDB(repoName, path, fileName)
-					}
-					break
-				}
-			}
+			break
 		}
-
 	}
+
 	if !served {
-		err = sendCachedFile(w, req, fileName, filePath)
-		if err == nil && config.Prefetch != nil && !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
-			updateDBRequestedFile(repoName, fileName) // update info for prefetching
-		}
+		err = serveFromCache(w, req, repoName, fileName, filePath)
 	}
 	return err
 }
