@@ -21,7 +21,7 @@ type Repo struct {
 	URL                  string   `yaml:"url"`
 	URLs                 []string `yaml:"urls"`
 	Mirrorlist           string   `yaml:"mirrorlist"`
-	mutex                sync.RWMutex
+	mutex                sync.Mutex
 	lastMirrorlistCheck  time.Time
 	lastModificationTime time.Time
 }

@@ -42,7 +42,13 @@ func updateRepoMirrorlist(repoName string, repo *Repo) error {
 	if err != nil {
 		return err
 	}
-	repo.lastModificationTime = fileInfo.ModTime()
+
+	fileModTime := fileInfo.ModTime()
+	if fileModTime == repo.lastModificationTime {
+		return nil
+	}
+
+	repo.lastModificationTime = fileModTime
 
 	// open readonly, it won't change modification time
 	file, err := os.Open(repo.Mirrorlist)
