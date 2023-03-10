@@ -85,7 +85,7 @@ repos:
 		PurgeFilesAfter: 2592000,
 		DownloadTimeout: 200,
 	}
-	if !cmp.Equal(*got, *want, cmpopts.IgnoreFields(Repo{}, "mutex")) {
+	if !cmp.Equal(*got, *want, cmpopts.IgnoreFields(Repo{}, "timestampsMutex", "urlsMutex")) {
 		t.Errorf("got %v, want %v", *got, *want)
 	}
 
@@ -95,7 +95,7 @@ repos:
 	}
 	updateMirrorlists()
 	got = config
-	if !cmp.Equal(*got, *want, cmpopts.IgnoreFields(Repo{}, "mutex")) {
+	if !cmp.Equal(*got, *want, cmpopts.IgnoreFields(Repo{}, "timestampsMutex", "urlsMutex")) {
 		t.Errorf("got %v, want %v", *got, *want)
 	}
 }

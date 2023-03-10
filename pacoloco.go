@@ -217,6 +217,8 @@ func prefetchRequest(url string, optionalCustomPath string) (err error) {
 			updateDBPrefetchedFile(repoName, fileName) // update info for prefetching
 		}
 	} else {
+		repo.urlsMutex.RLock()
+		defer repo.urlsMutex.RUnlock()
 		for _, url := range repo.URLs {
 			downloaded, err = downloadFile(url+path+"/"+fileName, filePath, ifLater)
 			if err == nil {

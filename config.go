@@ -23,7 +23,8 @@ type Repo struct {
 	Mirrorlist           string    `yaml:"mirrorlist"`
 	LastMirrorlistCheck  time.Time `yaml:"-"`
 	LastModificationTime time.Time `yaml:"-"`
-	mutex                sync.Mutex
+	timestampsMutex      sync.Mutex
+	urlsMutex            sync.RWMutex
 }
 
 type RefreshPeriod struct {

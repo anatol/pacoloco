@@ -32,8 +32,8 @@ func tryCheckAndUpdateMirrorlistRepo(repoName string, repo *Repo) error {
 		return nil
 	}
 
-	repo.mutex.Lock()
-	defer repo.mutex.Unlock()
+	repo.timestampsMutex.Lock()
+	defer repo.timestampsMutex.Unlock()
 
 	// if we checked recently then skip it
 	if time.Since(repo.LastMirrorlistCheck) < 5*time.Second {
@@ -60,6 +60,9 @@ func tryCheckAndUpdateMirrorlistRepo(repoName string, repo *Repo) error {
 		return err
 	}
 	defer file.Close()
+
+	repo.urlsMutex.Lock()
+	defer repo.urlsMutex.Unlock()
 
 	// initialize the urls collection
 	repo.URLs = make([]string, 0)
