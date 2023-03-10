@@ -18,12 +18,12 @@ const DefaultTTLUnupdated = 200
 const DefaultDBName = "sqlite-pkg-cache.db"
 
 type Repo struct {
-	URL                  string     `yaml:"url"`
-	URLs                 []string   `yaml:"urls"`
-	Mirrorlist           string     `yaml:"mirrorlist"`
-	Mutex                sync.Mutex `yaml:"-"`
-	LastMirrorlistCheck  time.Time  `yaml:"-"`
-	LastModificationTime time.Time  `yaml:"-"`
+	URL                  string    `yaml:"url"`
+	URLs                 []string  `yaml:"urls"`
+	Mirrorlist           string    `yaml:"mirrorlist"`
+	LastMirrorlistCheck  time.Time `yaml:"-"`
+	LastModificationTime time.Time `yaml:"-"`
+	mutex                sync.Mutex
 }
 
 type RefreshPeriod struct {

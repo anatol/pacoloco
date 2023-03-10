@@ -57,7 +57,7 @@ repos:
 		DownloadTimeout: 200,
 		Prefetch:        &RefreshPeriod{Cron: "0 0 3 * * * *", TTLUnaccessed: 5, TTLUnupdated: 200},
 	}
-	if !cmp.Equal(*got, *want, cmpopts.IgnoreFields(Config{}, "Prefetch"), cmpopts.IgnoreFields(Repo{}, "Mutex")) {
+	if !cmp.Equal(*got, *want, cmpopts.IgnoreFields(Config{}, "Prefetch"), cmpopts.IgnoreFields(Repo{}, "mutex")) {
 		t.Errorf("got %v, want %v", *got, *want)
 	}
 	gotR := *(*got).Prefetch
@@ -154,12 +154,36 @@ repos:
 		DownloadTimeout: 200,
 		Prefetch:        &RefreshPeriod{Cron: "0 0 3 * * * *", TTLUnaccessed: 5, TTLUnupdated: 200},
 	}
-	if !cmp.Equal(*got, *want, cmpopts.IgnoreFields(Config{}, "Prefetch"), cmpopts.IgnoreFields(Repo{}, "Mutex")) {
+	if !cmp.Equal(*got, *want, cmpopts.IgnoreFields(Config{}, "Prefetch"), cmpopts.IgnoreFields(Repo{}, "mutex")) {
 		t.Errorf("got %v, want %v", *got, *want)
 	}
 	gotR := *(*got).Prefetch
 	wantR := *(*want).Prefetch
 	if !cmp.Equal(gotR, wantR) {
 		t.Errorf("got %v, want %v", gotR, wantR)
+	}
+}
+
+func TestLoadConfigWithMirrorlistTimestamps(t *testing.T) {
+	got := parseConfig([]byte(`
+cache_dir: /tmp
+repos:
+  archlinux:
+    url: http://mirrors.kernel.org/archlinux
+    # these fields *shouldn't* be unmarshalled
+    lastmirrorlistcheck: 2
+    lastmodificationtime: 2
+`))
+	want := &Config{
+		CacheDir: "/tmp",
+		Port:     DefaultPort,
+		Repos: map[string]*Repo{
+			"archlinux": &Repo{
+				URL: "http://mirrors.kernel.org/archlinux",
+			},
+		},
+	}
+	if !cmp.Equal(*got, *want, cmpopts.IgnoreFields(Repo{}, "mutex")) {
+		t.Errorf("got %v, want %v", *got, *want)
 	}
 }

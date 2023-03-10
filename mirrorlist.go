@@ -20,8 +20,8 @@ func updateMirrorlists() {
 
 func checkAndUpdateMirrorlistRepo(repoName string, repo *Repo) error {
 	if repo.Mirrorlist != "" {
-		repo.Mutex.Lock()
-		defer repo.Mutex.Unlock()
+		repo.mutex.Lock()
+		defer repo.mutex.Unlock()
 
 		if time.Since(repo.LastMirrorlistCheck) < 5*time.Second {
 			// if there is an entry in the lastMirrorlistCheck and that entry has a distance lower than 5 seconds from now, don't update its mirrorlist
