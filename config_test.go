@@ -38,6 +38,7 @@ prefetch:
   cron: 0 0 3 * * * *
   ttl_unaccessed_in_days: 5
 download_timeout: 200
+skip_file_availability_check: y
 port: 9139
 repos:
   archlinux:
@@ -54,6 +55,7 @@ repos:
 		},
 		PurgeFilesAfter: 2592000,
 		DownloadTimeout: 200,
+		SkipHeadCheck:   true,
 		Prefetch:        &RefreshPeriod{Cron: "0 0 3 * * * *", TTLUnaccessed: 5, TTLUnupdated: 200},
 	}
 	if !cmp.Equal(*got, *want, cmpopts.IgnoreFields(Config{}, "Prefetch"), cmpopts.IgnoreUnexported(Repo{})) {

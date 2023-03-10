@@ -4,6 +4,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -19,12 +20,12 @@ func TestMain(m *testing.M) {
 }
 
 func TestPathMatcher(t *testing.T) {
-	pathCheck := func(url string, repoName string, path string, fileName string) {
-		matches := pathRegex.FindStringSubmatch(url)
+	pathCheck := func(url string, repoName string, urlPath string, fileName string) {
+		matches := pathRegex.FindStringSubmatch(path.Clean(url))
 		if matches == nil {
 			t.Errorf("url '%v' does not match regexp", url)
 		}
-		expected := []string{url, repoName, path, fileName}
+		expected := []string{url, repoName, urlPath, fileName}
 
 		if !cmp.Equal(matches, expected) {
 			t.Errorf("expected '%v' but regexp submatches '%v'", expected, matches)
@@ -32,7 +33,7 @@ func TestPathMatcher(t *testing.T) {
 	}
 
 	pathFails := func(url string) {
-		matches := pathRegex.FindStringSubmatch(url)
+		matches := pathRegex.FindStringSubmatch(path.Clean(url))
 		if matches != nil {
 			t.Errorf("url '%v' expected to fail matching", url)
 		}
@@ -43,6 +44,8 @@ func TestPathMatcher(t *testing.T) {
 	pathFails("repo/foo/webkit2gtk-2.26.4-1-x86_64.pkg.tar.zst")
 	pathFails("/repo/webkit2gtk-2.26.4-1-x86_64.pkg.tar.zst")
 	pathFails("/webkit2gtk/repo/foo/-2.26.4-1-x86_64.pkg.tar.zst")
+	pathFails("/repo/foo/../webkit2gtk-2.26.4-1-x86_64.pkg.tar.zst")
+	pathFails("/repo/../whatever/webkit2gtk-2.26.4-1-x86_64.pkg.tar.zst")
 
 	pathCheck("/repo/foo/webkit2gtk-2.26.4-1-x86_64.pkg.tar.zst", "foo", "", "webkit2gtk-2.26.4-1-x86_64.pkg.tar.zst")
 	pathCheck("/repo/foo/bar/bazzz/eeee/webkit2x86_64.pkg.tar.zst", "foo", "/bar/bazzz/eeee", "webkit2x86_64.pkg.tar.zst")

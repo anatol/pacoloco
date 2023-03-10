@@ -224,7 +224,7 @@ func updateDBRequestedDB(repoName string, path_ string, filename string) (Mirror
 		log.Fatalf("prefetchDB is uninitialized")
 	}
 	urlDB := path.Join("/repo/", repoName, path_, filename)
-	matches := pathRegex.FindStringSubmatch(urlDB)
+	matches := pathRegex.FindStringSubmatch(path.Clean(urlDB))
 	if len(matches) == 0 {
 		return MirrorDB{}, fmt.Errorf("url '%v' is invalid, cannot save it for prefetching", urlDB)
 	}

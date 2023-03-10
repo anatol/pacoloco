@@ -146,7 +146,7 @@ func downloadAndParseDb(mirror MirrorDB) error {
 			return err
 		}
 	}
-	matches := pathRegex.FindStringSubmatch(mirror.URL)
+	matches := pathRegex.FindStringSubmatch(path.Clean(mirror.URL))
 	if len(matches) == 0 {
 		return fmt.Errorf("url '%v' is invalid, does not match path regex", mirror.URL)
 	}

@@ -201,7 +201,7 @@ func TestDropUnusedDBFiles(t *testing.T) {
 	}
 	var mirr MirrorDB
 	prefetchDB.Model(&MirrorDB{}).Where("mirror_dbs.url = ? and mirror_dbs.repo_name = ?", "/repo/example/url/test.db", "example").First(&mirr)
-	matches := pathRegex.FindStringSubmatch(mirr.URL)
+	matches := pathRegex.FindStringSubmatch(path.Clean(mirr.URL))
 	if len(matches) == 0 {
 		t.Errorf("It should be a proper pacoloco path url")
 	}

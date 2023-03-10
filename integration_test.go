@@ -59,6 +59,10 @@ func TestPacolocoIntegrationWithPrefetching(t *testing.T) {
 	t.Run("testRequestExistingRepoWithDb", testRequestExistingRepoWithDb)
 	t.Run("testRequestPackageFile", testRequestPackageFile)
 	t.Run("testFailover", testFailover)
+	t.Run("testRequestPartialFile", testRequestPartialFile)
+	t.Run("testRequestRepoRoot", testRequestRepoRoot)
+	t.Run("testRequestNonExistentRepoRoot", testRequestNonExistentRepoRoot)
+
 	if _, err := os.Stat(path.Join(testPacolocoDir, DefaultDBName)); os.IsNotExist(err) {
 		t.Errorf("DB file should be created!")
 	}
@@ -114,8 +118,8 @@ func testInvalidURL(t *testing.T) {
 	w := httptest.NewRecorder()
 	pacolocoHandler(w, req)
 	resp := w.Result()
-	if resp.StatusCode != 404 {
-		t.Error("404 response expected")
+	if resp.StatusCode != 404 && resp.StatusCode != 403 {
+		t.Errorf("404 or 403 response expected, got %v", resp.StatusCode)
 	}
 }
 
@@ -126,7 +130,7 @@ func testRequestNonExistingDb(t *testing.T) {
 	pacolocoHandler(w, req)
 	resp := w.Result()
 	if resp.StatusCode != 404 {
-		t.Error("404 response expected")
+		t.Errorf("404 response expected, got %v", resp.StatusCode)
 	}
 
 	// check that no repo cached
@@ -134,7 +138,34 @@ func testRequestNonExistingDb(t *testing.T) {
 		t.Error("test repo should not cached")
 	}
 }
-
+func testRequestRepoRoot(t *testing.T) {
+	upstreamMirror := &Repo{}
+	upstreamMirror.URL = mirrorURL + "/testrepo"
+	config.Repos["testrepo"] = upstreamMirror
+	defer delete(config.Repos, "testrepo")
+	// Requesting an existent repo root
+	req := httptest.NewRequest("GET", pacolocoURL+"/repo/testrepo/", nil)
+	w := httptest.NewRecorder()
+	pacolocoHandler(w, req)
+	resp := w.Result()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("200 response expected, got %v", resp.StatusCode)
+	}
+}
+func testRequestNonExistentRepoRoot(t *testing.T) {
+	upstreamMirror := &Repo{}
+	upstreamMirror.URL = mirrorURL + "/testrepo"
+	config.Repos["testrepo"] = upstreamMirror
+	defer delete(config.Repos, "testrepo")
+	// Requesting a nonexistent repo root
+	req := httptest.NewRequest("GET", pacolocoURL+"/repo/nonexistenttest/", nil)
+	w := httptest.NewRecorder()
+	pacolocoHandler(w, req)
+	resp := w.Result()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("403 response expected, got %v", resp.StatusCode)
+	}
+}
 func testRequestExistingRepo(t *testing.T) {
 	// Requesting existing repo
 	config.Repos["repo1"] = &Repo{}
@@ -144,8 +175,9 @@ func testRequestExistingRepo(t *testing.T) {
 	w := httptest.NewRecorder()
 	pacolocoHandler(w, req)
 	resp := w.Result()
-	if resp.StatusCode != 404 {
-		t.Error("404 response expected")
+	// There is no mirror url, we should expect a 500
+	if resp.StatusCode != 404 && resp.StatusCode != 500 {
+		t.Errorf("404 or 500 response expected, got %v", resp.StatusCode)
 	}
 
 	// check that db is not cached
@@ -265,18 +297,18 @@ func testRequestExistingRepoWithDb(t *testing.T) {
 
 func testRequestPackageFile(t *testing.T) {
 	// Requesting existing repo
-	repo3 := &Repo{
-		URL: mirrorURL + "/mirror3",
+	repo4 := &Repo{
+		URL: mirrorURL + "/mirror4",
 	}
-	config.Repos["repo3"] = repo3
-	defer delete(config.Repos, "repo3")
+	config.Repos["repo4"] = repo4
+	defer delete(config.Repos, "repo4")
 
-	if err := os.Mkdir(path.Join(mirrorDir, "mirror3"), os.ModePerm); err != nil {
+	if err := os.Mkdir(path.Join(mirrorDir, "mirror4"), os.ModePerm); err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(path.Join(mirrorDir, "mirror3"))
+	defer os.RemoveAll(path.Join(mirrorDir, "mirror4"))
 
-	pkgAtMirror := path.Join(mirrorDir, "mirror3", "test-1-any.pkg.tar.zst")
+	pkgAtMirror := path.Join(mirrorDir, "mirror4", "test-1-any.pkg.tar.zst")
 	pkgFileContent := "a package"
 	if err := os.WriteFile(pkgAtMirror, []byte(pkgFileContent), os.ModePerm); err != nil {
 		t.Fatal(err)
@@ -287,12 +319,12 @@ func testRequestPackageFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	req := httptest.NewRequest("GET", pacolocoURL+"/repo/repo3/test-1-any.pkg.tar.zst", nil)
+	req := httptest.NewRequest("GET", pacolocoURL+"/repo/repo4/test-1-any.pkg.tar.zst", nil)
 	w := httptest.NewRecorder()
 	pacolocoHandler(w, req)
 	resp := w.Result()
 
-	defer os.RemoveAll(path.Join(testPacolocoDir, "pkgs", "repo3")) // remove cached content
+	defer os.RemoveAll(path.Join(testPacolocoDir, "pkgs", "repo4")) // remove cached content
 
 	if resp.StatusCode != 200 {
 		t.Errorf("200 response expected, got %v", resp.StatusCode)
@@ -315,7 +347,7 @@ func testRequestPackageFile(t *testing.T) {
 	}
 
 	// check that pkg is cached
-	content, err = os.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo3", "test-1-any.pkg.tar.zst"))
+	content, err = os.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo4", "test-1-any.pkg.tar.zst"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -332,7 +364,7 @@ func testRequestPackageFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	req = httptest.NewRequest("GET", pacolocoURL+"/repo/repo3/test-1-any.pkg.tar.zst", nil)
+	req = httptest.NewRequest("GET", pacolocoURL+"/repo/repo4/test-1-any.pkg.tar.zst", nil)
 	w = httptest.NewRecorder()
 	pacolocoHandler(w, req)
 	resp = w.Result()
@@ -348,7 +380,7 @@ func testRequestPackageFile(t *testing.T) {
 	}
 
 	// check that repo is cached
-	content, err = os.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo3", "test-1-any.pkg.tar.zst"))
+	content, err = os.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo4", "test-1-any.pkg.tar.zst"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -363,6 +395,71 @@ func testRequestPackageFile(t *testing.T) {
 			expectedModTime,
 			w.Header().Get("Last-Modified"))
 	}
+}
+func testRequestPartialFile(t *testing.T) {
+	upstreamMirror := &Repo{}
+	upstreamMirror.URL = mirrorURL + "/mirror"
+	config.Repos["mirror"] = upstreamMirror
+	defer delete(config.Repos, "mirror")
+
+	if err := os.Mkdir(path.Join(mirrorDir, "mirror"), os.ModePerm); err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(path.Join(mirrorDir, "mirror"))
+
+	pkgAtMirror := path.Join(mirrorDir, "mirror", "test-1-any.pkg.tar.zst")
+	pkgFileContent := "Test content 42"
+	if err := os.WriteFile(pkgAtMirror, []byte(pkgFileContent), os.ModePerm); err != nil {
+		t.Fatal(err)
+	}
+
+	defer os.RemoveAll(path.Join(testPacolocoDir, "pkgs", "mirror")) // remove cached content
+
+	// Do a request with range! TODO It should redirect upstream as unable to serve partial content at the moment!
+	req := httptest.NewRequest("GET", pacolocoURL+"/repo/mirror/test-1-any.pkg.tar.zst", nil)
+	req.Header.Set("Range", "bytes=0-3") // Just to trigger the partial content
+	w := httptest.NewRecorder()
+	pacolocoHandler(w, req)
+	resp := w.Result()
+
+	if resp.StatusCode != 302 { // TODO replace once partial download is fixed definitely
+		t.Errorf("302 response expected, got %v", resp.StatusCode)
+	}
+	// Now let's cache the file for real
+	req = httptest.NewRequest("GET", pacolocoURL+"/repo/mirror/test-1-any.pkg.tar.zst", nil)
+	w = httptest.NewRecorder()
+	pacolocoHandler(w, req)
+	resp = w.Result()
+
+	if resp.StatusCode != 200 {
+		t.Errorf("200 response expected, got %v", resp.StatusCode)
+	}
+	content, err := io.ReadAll(w.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != pkgFileContent {
+		t.Errorf("Pacoloco cached incorrect pkg content: %v", string(content))
+	}
+	// now it is cached!
+	// Partial requests should work now!
+	req = httptest.NewRequest("GET", pacolocoURL+"/repo/mirror/test-1-any.pkg.tar.zst", nil)
+	w = httptest.NewRecorder()
+	req.Header.Set("Range", "bytes=13-14")
+	pacolocoHandler(w, req)
+	resp = w.Result()
+
+	if resp.StatusCode != http.StatusPartialContent {
+		t.Errorf("206 response expected, got %v", resp.StatusCode)
+	}
+	content, err = io.ReadAll(w.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "42" {
+		t.Errorf("Pacoloco partial request served incorrect pkg content: expected \"42\" got \"%v\"", string(content))
+	}
+
 }
 
 func testFailover(t *testing.T) {

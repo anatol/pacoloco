@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -21,7 +22,8 @@ import (
 var configFile = flag.String("config", "/etc/pacoloco.yaml", "Path to config file")
 
 var (
-	pathRegex       *regexp.Regexp
+	pathRegex       *regexp.Regexp // to check if a URL request's path is valid
+	rootPathRegex   *regexp.Regexp // to check if a URL request's path is valid for a repo root directory
 	filenameRegex   *regexp.Regexp // to get the details of a package (arch, version etc)
 	filenameDBRegex *regexp.Regexp // to get the filename from the db file
 	mirrorlistRegex *regexp.Regexp // to extract the url from a mirrorlist file
@@ -34,6 +36,11 @@ var allowedPackagesExtensions []string
 func init() {
 	var err error
 	pathRegex, err = regexp.Compile("^/repo/([^/]*)(/.*)?/([^/]*)$")
+	if err != nil {
+		panic(err)
+	}
+	// Useful to check if a pacoloco repository is available
+	rootPathRegex, err = regexp.Compile("^/repo/([^/]*)/?$")
 	if err != nil {
 		panic(err)
 	}
@@ -125,7 +132,7 @@ func main() {
 	}
 
 	if config.UserAgent == "" {
-		config.UserAgent = "Pacoloco/1.2"
+		config.UserAgent = "Pacoloco/1.2.1"
 	}
 
 	listenAddr := fmt.Sprintf(":%d", config.Port)
@@ -139,7 +146,7 @@ func main() {
 func pacolocoHandler(w http.ResponseWriter, req *http.Request) {
 	if err := handleRequest(w, req); err != nil {
 		log.Println(err)
-		w.WriteHeader(http.StatusNotFound)
+		// w.WriteHeader(http.StatusNotFound) // no more neeeded
 	}
 }
 
@@ -158,14 +165,14 @@ func forceCheckAtServer(fileName string) bool {
 // A mutex map for files currently being downloaded
 // It is used to prevent downloading the same file with concurrent requests
 var (
-	downloadingFiles      = make(map[string]*sync.Mutex)
-	downloadingFilesMutex sync.Mutex
+	downloadingFiles      = make(map[string]bool)
+	downloadingFilesMutex sync.RWMutex
 )
 
 // force resources prefetching
 func prefetchRequest(url string, optionalCustomPath string) (err error) {
 	urlPath := url
-	matches := pathRegex.FindStringSubmatch(urlPath)
+	matches := pathRegex.FindStringSubmatch(path.Clean(urlPath))
 	if len(matches) == 0 {
 		return fmt.Errorf("input url path '%v' does not match expected format", urlPath)
 	}
@@ -190,50 +197,83 @@ func prefetchRequest(url string, optionalCustomPath string) (err error) {
 		filePath = filepath.Join(cachePath, fileName)
 	}
 	// mandatory update when prefetching,
-
-	mutexKey := repoName + ":" + fileName
-	downloadingFilesMutex.Lock()
-	fileMutex, ok := downloadingFiles[mutexKey]
-	if !ok {
-		fileMutex = &sync.Mutex{}
-		downloadingFiles[mutexKey] = fileMutex
-	}
-	downloadingFilesMutex.Unlock()
-	fileMutex.Lock()
-	defer func() {
-		fileMutex.Unlock()
-		downloadingFilesMutex.Lock()
-		delete(downloadingFiles, mutexKey)
+	dummyIfLater := time.Time{} // Not important here
+	// ---------------------------- Begin mutex code ----------------------------
+	mutexKey := filePath
+	// Check files and the map with a read lock on the map,
+	// to guarantee that it is being kept in a safe status throughout those checks
+	downloadingFilesMutex.RLock()
+	_, isBeingDownloaded := downloadingFiles[mutexKey]
+	// Start locking this file's mutex if the file has to be downloaded
+	if !isBeingDownloaded {
+		// Edit the map by saying that I am downloading this file
+		downloadingFilesMutex.RUnlock()                    // There is no atomic way to promote a R lock to a W lock, so we need to unlock and lock again
+		downloadingFilesMutex.Lock()                       // Exclusively locked
+		_, isBeingDownloaded := downloadingFiles[mutexKey] // if someone else is downloading it now, I cannot download it
+		if !isBeingDownloaded {
+			downloadingFiles[mutexKey] = true
+		}
 		downloadingFilesMutex.Unlock()
-	}()
-
-	// refresh the data in case if the file has been download while we were waiting for the mutex
-	ifLater := time.Time{} // spoofed to avoid rewriting downloadFile
-	downloaded := false
-	for _, url := range repo.getUrls() {
-		downloaded, err = downloadFile(url+path+"/"+fileName, filePath, ifLater, nil)
-		if downloaded {
-			break
+	} else {
+		downloadingFilesMutex.RUnlock() // unlock the read lock
+	}
+	// ---------------------------- End mutex code ----------------------------
+	if isBeingDownloaded {
+		// Someone else is downloading this file, so I cannot download it. I can skip it, in the assumption that the other thread will download it
+		// won't stop the download
+		return fmt.Errorf("file %s in repo %s is already being downloaded, there is no point in prefetching it", fileName, repoName)
+	} else {
+		urls := repo.getUrls()
+		if len(urls) > 0 {
+			var lastErr error
+			for _, url := range urls {
+				statusHeadReq, err := checkUpstreamFileAvailability(url+path+"/"+fileName, dummyIfLater)
+				if shouldSendRequest(statusHeadReq) {
+					downloaded, err := downloadFile(url+path+"/"+fileName, filePath, dummyIfLater, nil)
+					if err == nil && config.Prefetch != nil && !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
+						updateDBPrefetchedFile(repoName, fileName) // update info for prefetching
+						return nil
+					} else if err != nil {
+						return err
+					} else if config.Prefetch == nil {
+						return fmt.Errorf("prefetching is not enabled in the config file but the file had been downloaded")
+					} else if !downloaded {
+						return fmt.Errorf("no error occurred but file %s had not prefetched", fileName)
+					} else {
+						// The file had been successfully prefetched and it is either a .sig or a .db file, so we can end here
+						return nil
+					}
+				} else if statusHeadReq == http.StatusNotModified && err == nil {
+					err = fmt.Errorf("the server %s replied 'Not Modified' with a default if-modified-since parameter! Considering %s as not available from here", url, fileName)
+				} // otherwise, try the next mirror
+				lastErr = err
+			}
+			if lastErr != nil {
+				return lastErr
+			} else {
+				return fmt.Errorf("file %s not available upstream in all repos", fileName)
+			}
+		} else {
+			return fmt.Errorf("no repo URL is available to satisfy your prefetch request")
 		}
 	}
-
-	if downloaded && config.Prefetch != nil {
-		if !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
-			updateDBPrefetchedFile(repoName, fileName) // update info for prefetching
-		}
-	}
-
-	if err == nil && !downloaded {
-		err = fmt.Errorf("not downloaded")
-	}
-
-	return err
 }
 
 func handleRequest(w http.ResponseWriter, req *http.Request) error {
 	urlPath := req.URL.Path
-	matches := pathRegex.FindStringSubmatch(urlPath)
+	matches := pathRegex.FindStringSubmatch(path.Clean(urlPath))
 	if len(matches) == 0 {
+		// Check if it was a check for a repo root
+		rootMatch := rootPathRegex.FindStringSubmatch(path.Clean(urlPath))
+		if len(rootMatch) != 0 {
+			repoName := rootMatch[1] // the filename should fall in
+			_, ok := config.Repos[repoName]
+			if ok {
+				w.WriteHeader(http.StatusOK)
+				return nil
+			}
+		}
+		w.WriteHeader(http.StatusForbidden)
 		return fmt.Errorf("input url path '%v' does not match expected format", urlPath)
 	}
 	repoName := matches[1]
@@ -241,78 +281,151 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 	fileName := matches[3]
 	repo, ok := config.Repos[repoName]
 	if !ok {
+		w.WriteHeader(http.StatusNotFound)
 		return fmt.Errorf("cannot find repo %s in the config file", repoName)
+	}
+	if fileName == "" && config.Repos[repoName] != nil {
+		// A request to the repo root should simply return a 200 OK with no listing
+		w.WriteHeader(http.StatusOK)
+		return nil
 	}
 
 	// create cache directory if needed
 	cachePath := filepath.Join(config.CacheDir, "pkgs", repoName)
-	if _, err := os.Stat(cachePath); os.IsNotExist(err) {
+	if _, cacheError := os.Stat(cachePath); os.IsNotExist(cacheError) {
 		if err := os.MkdirAll(cachePath, os.ModePerm); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
 			return err
 		}
 	}
-
 	filePath := filepath.Join(cachePath, fileName)
-	stat, err := os.Stat(filePath)
-	noFile := err != nil
-	requestFromServer := noFile || forceCheckAtServer(fileName)
-
-	if requestFromServer {
-		mutexKey := repoName + ":" + fileName
-		downloadingFilesMutex.Lock()
-		fileMutex, ok := downloadingFiles[mutexKey]
-		if !ok {
-			fileMutex = &sync.Mutex{}
-			downloadingFiles[mutexKey] = fileMutex
-		}
-		downloadingFilesMutex.Unlock()
-		fileMutex.Lock()
+	// Check files and the map with a write lock on the map, to guarantee that it is being kept
+	//in a safe status throughout those checks in which we establish what it has to be done.
+	// A more restrictive write lock has to be used to specify what we are planning to download
+	hasRangeHeader := req.Header.Get("Range") != ""
+	mutexKey := filePath
+	downloadingFilesMutex.Lock()
+	cachedFileStat, cacheStatErr := os.Stat(filePath)
+	existsCachedFile := cacheStatErr == nil
+	ifModifiedSince, ifModifiedSinceParsingError := http.ParseTime(req.Header.Get("If-Modified-Since"))
+	shouldForceCheck := forceCheckAtServer(fileName)
+	_, beingDownloaded := downloadingFiles[mutexKey]
+	existsFullyCachedFile := !beingDownloaded && existsCachedFile // Assume that if there is no mutex, the file is fully cached
+	hasToBeDownloaded := (shouldForceCheck || !existsFullyCachedFile) && !beingDownloaded && !hasRangeHeader
+	if hasToBeDownloaded {
+		downloadingFiles[mutexKey] = true
 		defer func() {
-			fileMutex.Unlock()
 			downloadingFilesMutex.Lock()
 			delete(downloadingFiles, mutexKey)
 			downloadingFilesMutex.Unlock()
 		}()
-
-		// refresh the data in case if the file has been download while we were waiting for the mutex
-		stat, err = os.Stat(filePath)
-		noFile = err != nil
-		requestFromServer = noFile || forceCheckAtServer(fileName)
 	}
+	downloadingFilesMutex.Unlock()
 
-	var downloaded bool
-	if requestFromServer {
-		ifLater, _ := http.ParseTime(req.Header.Get("If-Modified-Since"))
-		if noFile {
-			// ignore If-Modified-Since and download file if it does not exist in the cache
-			ifLater = time.Time{}
-		} else if stat.ModTime().After(ifLater) {
-			ifLater = stat.ModTime()
-		}
-
-		for _, url := range repo.getUrls() {
-			downloaded, err = downloadFile(url+path+"/"+fileName, filePath, ifLater, w)
-			if err == nil {
-				break
-			}
+	// Early serve the request if the file is fully cached and the client has the updated file
+	if ifModifiedSinceParsingError == nil && existsFullyCachedFile && !shouldForceCheck {
+		if ifModifiedSince.After(cachedFileStat.ModTime()) || ifModifiedSince.Equal(cachedFileStat.ModTime()) {
+			w.WriteHeader(http.StatusNotModified)
+			return nil
 		}
 	}
-	if !downloaded {
+	// Set the ifModifiedSince parameter if unset
+	if ifModifiedSinceParsingError != nil {
+		ifModifiedSince = time.Time{}
+	}
+	if existsFullyCachedFile && !shouldForceCheck { // Serve the local file if it exists
+		// We could check the if-modified-since header here, but we don't need to
+		// since file names are assumed to be unique
 		log.Printf("serving cached file %v", filePath)
 		http.ServeFile(w, req, filePath)
-	}
-
-	if downloaded && config.Prefetch != nil {
-		if !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
+		if config.Prefetch != nil && !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
 			updateDBRequestedFile(repoName, fileName) // update info for prefetching
 		} else if strings.HasSuffix(fileName, ".db") {
 			updateDBRequestedDB(repoName, path, fileName)
 		}
+	} else if hasRangeHeader || beingDownloaded {
+		// If the file is an unhandled range request (unhandled because it is not cached) or it is being downloaded,
+		// redirect to the upstream repo
+		urls := repo.getUrls()
+		if len(urls) > 0 {
+			var latestErr error
+			for _, url := range urls {
+				statusHeadReq, err := checkUpstreamFileAvailability(url+path+"/"+fileName, ifModifiedSince)
+				if shouldSendRequest(statusHeadReq) && err == nil { // file exists on the server or the server refuses HEAD requests
+					log.Default().Printf("Redirecting to %s", url+path+"/"+fileName)
+					http.Redirect(w, req, url+path+"/"+fileName, http.StatusFound)
+					if config.Prefetch != nil && !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
+						updateDBRequestedFile(repoName, fileName) // update info for prefetching
+					} else if config.Prefetch != nil && strings.HasSuffix(fileName, ".db") {
+						updateDBRequestedDB(repoName, path, fileName)
+					}
+					return nil
+				} // if an error occurs, skip this mirror url and try the next one
+				latestErr = err
+			}
+			if latestErr == nil {
+				w.WriteHeader(http.StatusNotFound)
+				return fmt.Errorf("the file %s is not available upstream on repo %s, aborted redirection", fileName, repoName)
+			} else {
+				w.WriteHeader(http.StatusNotFound) // None of the mirrors have the file
+				return fmt.Errorf("the file %s is not available upstream or repo %s, download failed on range/concurrent request, error %s", fileName, repoName, latestErr)
+			}
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+			return fmt.Errorf("no upstream mirror found for repo %s", repoName)
+		}
 	}
-	return err
+
+	if !hasToBeDownloaded {
+		w.WriteHeader(http.StatusInternalServerError)
+		return fmt.Errorf("this is a bug: It should never happen that the file that is going to be downloaded shouldn't be downloaded")
+	}
+	// Otherwise download the file and serve it
+	// It should happen only if (shouldForceCheck || !existsFullyCachedFile) && !beingDownloaded && !hasRangeHeader
+	urls := repo.getUrls()
+	if len(urls) > 0 {
+		var downloadErr error
+		var statusHeadReq int
+		downloadErr = nil
+		downloaded := false
+		for _, url := range urls {
+			statusHeadReq, downloadErr = checkUpstreamFileAvailability(url+path+"/"+fileName, ifModifiedSince)
+			if statusHeadReq == http.StatusNotModified && downloadErr == nil {
+				// We're done but it should not happen, as we checked before
+				w.WriteHeader(http.StatusNotModified)
+				return nil
+			}
+			if shouldSendRequest(statusHeadReq) && downloadErr == nil {
+				downloaded, downloadErr = downloadFile(url+path+"/"+fileName, filePath, ifModifiedSince, w)
+				if downloadErr == nil {
+					if config.Prefetch != nil && !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
+						updateDBRequestedFile(repoName, fileName) // update info for prefetching
+					} else if downloadErr == nil && config.Prefetch != nil && strings.HasSuffix(fileName, ".db") {
+						updateDBRequestedDB(repoName, path, fileName)
+					}
+					if downloaded {
+						return nil
+					} else {
+						w.WriteHeader(http.StatusInternalServerError) // probably superfluous
+						return fmt.Errorf("this is a bug: %s had been requested, downloaded but not served", url+path+"/"+fileName)
+					}
+				}
+			} // if it shouldn't send the request to this mirror, so try the next one if it exists
+		}
+		if downloadErr != nil {
+			w.WriteHeader(http.StatusNotFound)
+			return downloadErr
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+			return fmt.Errorf("the file %s is not available upstream or repo %s, download failed", fileName, repoName)
+		}
+	}
+	// else
+	w.WriteHeader(http.StatusInternalServerError)
+	return fmt.Errorf("no upstream mirror found for repo %s", repoName)
 }
 
-// downloadFileAndSend downloads file from `url`, saves it to the given `localFileName`
+// downloadFile downloads file from `url`, saves it to the given `localFileName`
 // file and sends to `clientWriter` at the same time.
 // The function returns whether the function sent the data to client and error if one occurred
 func downloadFile(url string, filePath string, ifModifiedSince time.Time, clientWriter http.ResponseWriter) (downloaded bool, err error) {
@@ -348,12 +461,12 @@ func downloadFile(url string, filePath string, ifModifiedSince time.Time, client
 		break
 	case http.StatusNotModified:
 		// either pacoloco or client has the latest version, no need to redownload it
-		return
+		return false, nil
 	default:
 		// for most dbs signatures are optional, be quiet if the signature is not found
 		// quiet := resp.StatusCode == http.StatusNotFound && strings.HasSuffix(url, ".db.sig")
 		err = fmt.Errorf("unable to download url %s, status code is %d", url, resp.StatusCode)
-		return
+		return false, err
 	}
 
 	file, err := os.Create(filePath)
@@ -368,6 +481,7 @@ func downloadFile(url string, filePath string, ifModifiedSince time.Time, client
 		clientWriter.Header().Set("Content-Length", resp.Header.Get("Content-Length"))
 		clientWriter.Header().Set("Content-Type", "application/octet-stream")
 		clientWriter.Header().Set("Last-Modified", resp.Header.Get("Last-Modified"))
+		clientWriter.Header().Set("Accept-Ranges", "bytes")
 		w = io.MultiWriter(w, clientWriter)
 	}
 
@@ -392,4 +506,41 @@ func downloadFile(url string, filePath string, ifModifiedSince time.Time, client
 	}
 
 	return
+}
+
+// Sends a HEAD request to check if the file is available on that url.
+// Returns the status code, config.SkipHeadCheck is set or the head method is not supported.
+func checkUpstreamFileAvailability(url string, ifModifiedSince time.Time) (statusCode int, err error) {
+	if config == nil {
+		return http.StatusBadGateway, fmt.Errorf("config is not initialized")
+	}
+	if config.SkipHeadCheck {
+		return http.StatusOK, nil
+	}
+	log.Default().Printf("Checking upstream availability of %s ...", url)
+	timeout := time.Duration(1000) * time.Millisecond
+	if config.FileAvailabilityTimeout > 0 {
+		timeout = time.Duration(config.DownloadTimeout) * time.Millisecond
+	}
+	ctx, ctxCancel := context.WithTimeout(context.Background(), timeout)
+	defer ctxCancel()
+	req, err := http.NewRequestWithContext(ctx, "HEAD", url, nil)
+	if !ifModifiedSince.IsZero() {
+		req.Header.Set("If-Modified-Since", ifModifiedSince.UTC().Format(http.TimeFormat))
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err == nil {
+		defer resp.Body.Close()
+		return resp.StatusCode, err
+	}
+	return -1, err
+}
+
+func shouldSendRequest(statusHeadReq int) bool {
+	return statusHeadReq == http.StatusOK ||
+		statusHeadReq == http.StatusFound || // accept redirects
+		statusHeadReq == http.StatusMethodNotAllowed || // head request is not supported
+		statusHeadReq == http.StatusTemporaryRedirect ||
+		statusHeadReq == http.StatusPermanentRedirect || // Almost unused, but just in case
+		statusHeadReq == http.StatusPartialContent // Should not happen, but just in case
 }

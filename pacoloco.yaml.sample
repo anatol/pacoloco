@@ -1,7 +1,9 @@
 # cache_dir: /var/cache/pacoloco
 # port: 9129
-download_timeout: 3600 # downloads will timeout if not completed after 3600 sec, 0 to disable timeout
+download_timeout: 3600 # timeout in seconds. Individual downloads will timeout if not completed after 1h, 0 to disable timeout
 purge_files_after: 2592000 # purge file after 30 days
+# skip_file_availability_check: y # Uncomment to disable HEAD requests before downloads. Skipping those should increase requests timeout
+# file_availability_timeout_ms: 2000 # Set the HEAD request timeout. Default is 2000ms
 # set_timestamp_to_logs: true # uncomment to add timestamp, useful if pacoloco is being ran through docker
 
 repos:
@@ -10,15 +12,16 @@ repos:
       - http://mirror.lty.me/archlinux
       - http://mirrors.kernel.org/archlinux
   archlinux-reflector:
-    mirrorlist: /etc/pacman.d/mirrorlist # Be careful! Check that pacoloco URL is NOT included in that file!
+    mirrorlist: /etc/pacman.d/mirrorlist # Specify a mirrorlist file from which fetch mirrors url.
+    # Be careful! Check that pacoloco URL is NOT included in that file!
   quarry:
     url: http://pkgbuild.com/~anatolik/quarry/x86_64
   sublime:
     url: https://download.sublimetext.com/arch/stable/x86_64
 prefetch: # optional section, add it if you want to enable prefetching
   cron: 0 0 3 * * * * # standard cron expression (https://en.wikipedia.org/wiki/Cron#CRON_expression) to define how frequently prefetch, see https://github.com/gorhill/cronexpr#implementation for documentation.
-  ttl_unaccessed_in_days: 30  # defaults to 30, set it to a higher value than the number of consecutive days you don't update your systems
+  ttl_unaccessed_in_days: 30 # defaults to 30, set it to a higher value than the number of consecutive days you don't update your systems
   # It deletes and stop prefetch packages(and db links) when not downloaded after ttl_unaccessed_in_days days that it had been updated.
   ttl_unupdated_in_days: 300 # defaults to 300, it deletes and stop prefetch packages which hadn't been either updated upstream or requested for ttl_unupdated_in_days.
 # http_proxy: http://proxy.company.com:8888 # Enable this if you have pacoloco running behind a proxy
-# user_agent: Pacoloco/1.2
+# user_agent: Pacoloco/1.2.1

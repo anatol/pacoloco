@@ -33,15 +33,17 @@ type RefreshPeriod struct {
 }
 
 type Config struct {
-	CacheDir        string           `yaml:"cache_dir"`
-	Port            int              `yaml:"port"`
-	Repos           map[string]*Repo `yaml:"repos,omitempty"`
-	PurgeFilesAfter int              `yaml:"purge_files_after"`
-	DownloadTimeout int              `yaml:"download_timeout"`
-	Prefetch        *RefreshPeriod   `yaml:"prefetch"`
-	HttpProxy       string           `yaml:"http_proxy"`
-	UserAgent       string           `yaml:"user_agent"`
-	LogTimestamp    bool             `yaml:"set_timestamp_to_logs"`
+	CacheDir                string           `yaml:"cache_dir"`
+	Port                    int              `yaml:"port"`
+	Repos                   map[string]*Repo `yaml:"repos,omitempty"`
+	PurgeFilesAfter         int              `yaml:"purge_files_after"`
+	DownloadTimeout         int              `yaml:"download_timeout"`
+	SkipHeadCheck           bool             `yaml:"skip_file_availability_check"`
+	FileAvailabilityTimeout int              `yaml:"file_availability_timeout_ms"`
+	Prefetch                *RefreshPeriod   `yaml:"prefetch"`
+	HttpProxy               string           `yaml:"http_proxy"`
+	UserAgent               string           `yaml:"user_agent"`
+	LogTimestamp            bool             `yaml:"set_timestamp_to_logs"`
 }
 
 var config *Config

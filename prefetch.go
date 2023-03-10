@@ -167,7 +167,7 @@ func purgePkgIfExists(pkgToDel *Package) {
 		basePathsToDelete := pkgToDel.getAllPaths()
 		for _, p := range basePathsToDelete {
 			pathToDelete := path.Join(config.CacheDir, p)
-			if _, err := os.Stat(pathToDelete); !os.IsNotExist(err) {
+			if _, err := os.Stat(pathToDelete); err == nil {
 				// if it exists, delete it
 				if err := os.Remove(pathToDelete); err != nil {
 					log.Printf("Error while trying to remove unused package %v : %v", pathToDelete, err)
