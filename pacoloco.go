@@ -310,6 +310,8 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 				updateDBRequestedDB(repoName, path, fileName)
 			}
 		} else {
+			repo.urlsMutex.RLock()
+			defer repo.urlsMutex.RUnlock()
 			for _, url := range repo.URLs {
 				served, err = downloadFileAndSend(url+path+"/"+fileName, filePath, ifLater, w)
 				if err == nil {
