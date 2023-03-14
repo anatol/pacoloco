@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 	"path"
-	"reflect"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -48,8 +47,8 @@ repos:
 	want := &Config{
 		CacheDir: `/tmp`,
 		Port:     9139,
-		Repos: map[string]Repo{
-			"archlinux": Repo{
+		Repos: map[string]*Repo{
+			"archlinux": &Repo{
 				URL: "http://mirrors.kernel.org/archlinux",
 			},
 		},
@@ -57,7 +56,7 @@ repos:
 		DownloadTimeout: 200,
 		Prefetch:        &RefreshPeriod{Cron: "0 0 3 * * * *", TTLUnaccessed: 5, TTLUnupdated: 200},
 	}
-	if !cmp.Equal(*got, *want, cmpopts.IgnoreFields(Config{}, "Prefetch")) {
+	if !cmp.Equal(*got, *want, cmpopts.IgnoreFields(Config{}, "Prefetch"), cmpopts.IgnoreUnexported(Repo{})) {
 		t.Errorf("got %v, want %v", *got, *want)
 	}
 	gotR := *(*got).Prefetch
@@ -79,8 +78,8 @@ repos:
 	want := &Config{
 		CacheDir: `/tmp`,
 		Port:     9129,
-		Repos: map[string]Repo{
-			"archlinux": Repo{
+		Repos: map[string]*Repo{
+			"archlinux": &Repo{
 				URL: "http://mirrors.kernel.org/archlinux",
 			},
 		},
@@ -89,7 +88,7 @@ repos:
 		Prefetch:        nil,
 	}
 
-	if !reflect.DeepEqual(got, want) {
+	if !cmp.Equal(*got, *want, cmpopts.IgnoreUnexported(Repo{})) {
 		t.Errorf("got %v, want %v", *got, *want)
 	}
 }
@@ -105,8 +104,8 @@ repos:
 	want := &Config{
 		CacheDir: `/tmp`,
 		Port:     9129,
-		Repos: map[string]Repo{
-			"archlinux": Repo{
+		Repos: map[string]*Repo{
+			"archlinux": &Repo{
 				URL: "http://mirrors.kernel.org/archlinux",
 			},
 		},
@@ -115,7 +114,7 @@ repos:
 		Prefetch:        nil,
 	}
 
-	if !reflect.DeepEqual(got, want) {
+	if !cmp.Equal(*got, *want, cmpopts.IgnoreUnexported(Repo{})) {
 		t.Errorf("got %v, want %v", *got, *want)
 	}
 }
@@ -145,8 +144,8 @@ repos:
 	want := &Config{
 		CacheDir: temp,
 		Port:     9139,
-		Repos: map[string]Repo{
-			"archlinux": Repo{
+		Repos: map[string]*Repo{
+			"archlinux": &Repo{
 				Mirrorlist: tmpfile,
 			},
 		},
@@ -154,12 +153,36 @@ repos:
 		DownloadTimeout: 200,
 		Prefetch:        &RefreshPeriod{Cron: "0 0 3 * * * *", TTLUnaccessed: 5, TTLUnupdated: 200},
 	}
-	if !cmp.Equal(*got, *want, cmpopts.IgnoreFields(Config{}, "Prefetch")) {
+	if !cmp.Equal(*got, *want, cmpopts.IgnoreFields(Config{}, "Prefetch"), cmpopts.IgnoreUnexported(Repo{})) {
 		t.Errorf("got %v, want %v", *got, *want)
 	}
 	gotR := *(*got).Prefetch
 	wantR := *(*want).Prefetch
 	if !cmp.Equal(gotR, wantR) {
 		t.Errorf("got %v, want %v", gotR, wantR)
+	}
+}
+
+func TestLoadConfigWithMirrorlistTimestamps(t *testing.T) {
+	got := parseConfig([]byte(`
+cache_dir: /tmp
+repos:
+  archlinux:
+    url: http://mirrors.kernel.org/archlinux
+    # these fields *shouldn't* be unmarshalled
+    lastmirrorlistcheck: 2
+    lastmodificationtime: 2
+`))
+	want := &Config{
+		CacheDir: "/tmp",
+		Port:     DefaultPort,
+		Repos: map[string]*Repo{
+			"archlinux": &Repo{
+				URL: "http://mirrors.kernel.org/archlinux",
+			},
+		},
+	}
+	if !cmp.Equal(*got, *want, cmpopts.IgnoreUnexported(Repo{})) {
+		t.Errorf("got %v, want %v", *got, *want)
 	}
 }

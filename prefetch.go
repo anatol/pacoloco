@@ -254,7 +254,6 @@ func prefetchPackages() {
 	if prefetchDB != nil {
 		log.Printf("Starting prefetching routine...\n")
 		// update mirrorlists from file if they exist
-		updateMirrorlists()
 		// purge all useless files
 		cleanPrefetchDB()
 		// prefetch all Packages

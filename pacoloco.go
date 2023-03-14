@@ -26,8 +26,6 @@ var filenameRegex *regexp.Regexp   // to get the details of a package (arch, ver
 var filenameDBRegex *regexp.Regexp // to get the filename from the db file
 var mirrorlistRegex *regexp.Regexp // to extract the url from a mirrorlist file
 var prefetchDB *gorm.DB
-var lastMirrorlistCheck map[string]time.Time  // use the file path as a key to get when it had been checked for modifications
-var lastModificationTime map[string]time.Time // use the file path as a key to get the last modification time known
 var userAgent string
 
 // Accepted formats
@@ -92,8 +90,6 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	} // shouldn't happen
-	lastMirrorlistCheck = make(map[string]time.Time)
-	lastModificationTime = make(map[string]time.Time)
 }
 
 func main() {
@@ -109,7 +105,6 @@ func main() {
 	if config.LogTimestamp == true {
 		log.SetFlags(log.LstdFlags)
 	}
-	updateMirrorlists()
 	if config.Prefetch != nil {
 		prefetchTicker := setupPrefetchTicker()
 		defer prefetchTicker.Stop()
@@ -212,25 +207,20 @@ func prefetchRequest(url string, optionalCustomPath string) (err error) {
 		delete(downloadingFiles, mutexKey)
 		downloadingFilesMutex.Unlock()
 	}()
+
 	// refresh the data in case if the file has been download while we were waiting for the mutex
 	ifLater := time.Time{} // spoofed to avoid rewriting downloadFile
 	downloaded := false
-	if repo.URL != "" {
-		downloaded, err = downloadFile(repo.URL+path+"/"+fileName, filePath, ifLater)
-		if err == nil && config.Prefetch != nil && !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
-			updateDBPrefetchedFile(repoName, fileName) // update info for prefetching
-		}
-	} else {
-		for _, url := range repo.URLs {
-			downloaded, err = downloadFile(url+path+"/"+fileName, filePath, ifLater)
-			if err == nil {
-				if config.Prefetch != nil && !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
-					updateDBPrefetchedFile(repoName, fileName) // update info for prefetching
-				}
-				break
+	for _, url := range getCurrentURLs(repo) {
+		downloaded, err = downloadFile(url+path+"/"+fileName, filePath, ifLater)
+		if err == nil {
+			if config.Prefetch != nil && !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
+				updateDBPrefetchedFile(repoName, fileName) // update info for prefetching
 			}
+			break
 		}
 	}
+
 	if err != nil {
 		return err
 	} else if !downloaded {
@@ -249,9 +239,6 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 	repoName := matches[1]
 	path := matches[2]
 	fileName := matches[3]
-	if err := checkAndUpdateMirrorlistRepo(repoName); err != nil { // Check if the relevant mirrorlist is up to date. If not, update it
-		return err
-	}
 	repo, ok := config.Repos[repoName]
 	if !ok {
 		return fmt.Errorf("cannot find repo %s in the config file", repoName)
@@ -303,27 +290,17 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 			ifLater = stat.ModTime()
 		}
 
-		if repo.URL != "" {
-			served, err = downloadFileAndSend(repo.URL+path+"/"+fileName, filePath, ifLater, w)
-			if err == nil && config.Prefetch != nil && !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
-				updateDBRequestedFile(repoName, fileName) // update info for prefetching
-			} else if err == nil && config.Prefetch != nil && strings.HasSuffix(fileName, ".db") {
-				updateDBRequestedDB(repoName, path, fileName)
-			}
-		} else {
-			for _, url := range repo.URLs {
-				served, err = downloadFileAndSend(url+path+"/"+fileName, filePath, ifLater, w)
-				if err == nil {
-					if config.Prefetch != nil && !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
-						updateDBRequestedFile(repoName, fileName) // update info for prefetching
-					} else if err == nil && config.Prefetch != nil && strings.HasSuffix(fileName, ".db") {
-						updateDBRequestedDB(repoName, path, fileName)
-					}
-					break
+		for _, url := range getCurrentURLs(repo) {
+			served, err = downloadFileAndSend(url+path+"/"+fileName, filePath, ifLater, w)
+			if err == nil {
+				if config.Prefetch != nil && !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
+					updateDBRequestedFile(repoName, fileName) // update info for prefetching
+				} else if err == nil && config.Prefetch != nil && strings.HasSuffix(fileName, ".db") {
+					updateDBRequestedDB(repoName, path, fileName)
 				}
+				break
 			}
 		}
-
 	}
 	if !served {
 		err = sendCachedFile(w, req, fileName, filePath)

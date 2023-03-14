@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os/user"
+	"time"
 
 	"github.com/gorhill/cronexpr"
 	"golang.org/x/sys/unix"
@@ -16,9 +17,12 @@ const DefaultTTLUnupdated = 200
 const DefaultDBName = "sqlite-pkg-cache.db"
 
 type Repo struct {
-	URL        string   `yaml:"url"`
-	URLs       []string `yaml:"urls"`
-	Mirrorlist string   `yaml:"mirrorlist"`
+	URL                  string    `yaml:"url"`
+	URLs                 []string  `yaml:"urls"`
+	Mirrorlist           string    `yaml:"mirrorlist"`
+	LastMirrorlistCheck  time.Time `yaml:"-"`
+	LastModificationTime time.Time `yaml:"-"`
+	urlsChan             chan chan []string
 }
 
 type RefreshPeriod struct {
@@ -28,18 +32,28 @@ type RefreshPeriod struct {
 }
 
 type Config struct {
-	CacheDir        string          `yaml:"cache_dir"`
-	Port            int             `yaml:"port"`
-	Repos           map[string]Repo `yaml:"repos,omitempty"`
-	PurgeFilesAfter int             `yaml:"purge_files_after"`
-	DownloadTimeout int             `yaml:"download_timeout"`
-	Prefetch        *RefreshPeriod  `yaml:"prefetch"`
-	HttpProxy       string          `yaml:"http_proxy"`
-	UserAgent       string          `yaml:"user_agent"`
-	LogTimestamp    bool            `yaml:"set_timestamp_to_logs"`
+	CacheDir        string           `yaml:"cache_dir"`
+	Port            int              `yaml:"port"`
+	Repos           map[string]*Repo `yaml:"repos,omitempty"`
+	PurgeFilesAfter int              `yaml:"purge_files_after"`
+	DownloadTimeout int              `yaml:"download_timeout"`
+	Prefetch        *RefreshPeriod   `yaml:"prefetch"`
+	HttpProxy       string           `yaml:"http_proxy"`
+	UserAgent       string           `yaml:"user_agent"`
+	LogTimestamp    bool             `yaml:"set_timestamp_to_logs"`
 }
 
 var config *Config
+
+func initURLsChannel(name string, repo *Repo) {
+	in := make(chan chan []string)
+	go func() {
+		for out := range in {
+			out <- getRepoURLs(name, repo)
+		}
+	}()
+	repo.urlsChan = in
+}
 
 func parseConfig(raw []byte) *Config {
 	var result = Config{
@@ -74,6 +88,7 @@ func parseConfig(raw []byte) *Config {
 			}
 			log.Fatalf("mirrorlist file %v for repo %v does not exist or isn't readable for user %v", repo.Mirrorlist, name, u.Username)
 		}
+		initURLsChannel(name, repo)
 	}
 
 	if result.PurgeFilesAfter < 10*60 && result.PurgeFilesAfter != 0 {
