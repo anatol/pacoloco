@@ -11,7 +11,7 @@ import (
 
 // test that `parseConfig()` can successfully load YAML config
 func TestLoadConfig(t *testing.T) {
-	var temp = t.TempDir()
+	temp := t.TempDir()
 	parseConfig([]byte(`
 port: 9129
 cache_dir: ` + temp + `
@@ -48,7 +48,7 @@ repos:
 		CacheDir: `/tmp`,
 		Port:     9139,
 		Repos: map[string]*Repo{
-			"archlinux": &Repo{
+			"archlinux": {
 				URL: "http://mirrors.kernel.org/archlinux",
 			},
 		},
@@ -79,7 +79,7 @@ repos:
 		CacheDir: `/tmp`,
 		Port:     9129,
 		Repos: map[string]*Repo{
-			"archlinux": &Repo{
+			"archlinux": {
 				URL: "http://mirrors.kernel.org/archlinux",
 			},
 		},
@@ -105,7 +105,7 @@ repos:
 		CacheDir: `/tmp`,
 		Port:     9129,
 		Repos: map[string]*Repo{
-			"archlinux": &Repo{
+			"archlinux": {
 				URL: "http://mirrors.kernel.org/archlinux",
 			},
 		},
@@ -120,8 +120,8 @@ repos:
 }
 
 func TestLoadConfigWithMirrorlist(t *testing.T) {
-	var temp = t.TempDir()
-	var tmpfile = path.Join(temp, "tmpMirrorFile")
+	temp := t.TempDir()
+	tmpfile := path.Join(temp, "tmpMirrorFile")
 
 	f, err := os.Create(tmpfile)
 	if err != nil {
@@ -145,7 +145,7 @@ repos:
 		CacheDir: temp,
 		Port:     9139,
 		Repos: map[string]*Repo{
-			"archlinux": &Repo{
+			"archlinux": {
 				Mirrorlist: tmpfile,
 			},
 		},
@@ -177,7 +177,7 @@ repos:
 		CacheDir: "/tmp",
 		Port:     DefaultPort,
 		Repos: map[string]*Repo{
-			"archlinux": &Repo{
+			"archlinux": {
 				URL: "http://mirrors.kernel.org/archlinux",
 			},
 		},

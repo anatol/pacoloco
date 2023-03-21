@@ -21,12 +21,14 @@ import (
 
 var configFile = flag.String("config", "/etc/pacoloco.yaml", "Path to config file")
 
-var pathRegex *regexp.Regexp
-var filenameRegex *regexp.Regexp   // to get the details of a package (arch, version etc)
-var filenameDBRegex *regexp.Regexp // to get the filename from the db file
-var mirrorlistRegex *regexp.Regexp // to extract the url from a mirrorlist file
-var prefetchDB *gorm.DB
-var userAgent string
+var (
+	pathRegex       *regexp.Regexp
+	filenameRegex   *regexp.Regexp // to get the details of a package (arch, version etc)
+	filenameDBRegex *regexp.Regexp // to get the filename from the db file
+	mirrorlistRegex *regexp.Regexp // to extract the url from a mirrorlist file
+	prefetchDB      *gorm.DB
+	userAgent       string
+)
 
 // Accepted formats
 var allowedPackagesExtensions []string

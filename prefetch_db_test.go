@@ -46,7 +46,6 @@ func TestDeleteCreateMirrorPkgsTable(t *testing.T) {
 			t.Errorf("mirror_packages table shouldn't exist")
 		}
 	}
-
 }
 
 func TestCreatePrefetchDB(t *testing.T) {
@@ -75,8 +74,8 @@ func TestCreatePrefetchDB(t *testing.T) {
 			t.Fatalf("createPrefetchDB shouldn't create entries in %v\n", table)
 		}
 	}
-
 }
+
 func TestGetDBConnection(t *testing.T) {
 	testSetupHelper(t)
 	createPrefetchDB()
@@ -88,6 +87,7 @@ func TestGetDBConnection(t *testing.T) {
 		t.Error("getDBConnection shouldn't return nil")
 	}
 }
+
 func TestGetPackage(t *testing.T) {
 	now := time.Now()
 	testSetupHelper(t)
@@ -180,7 +180,6 @@ func TestGetAndDropDeadPackages(t *testing.T) {
 	if latestPkgInDB.PackageName != "" && pkg.Arch != "" {
 		t.Errorf("Package should have been deleted")
 	}
-
 }
 
 func TestDropUnusedDBFiles(t *testing.T) {
@@ -216,7 +215,6 @@ func TestDropUnusedDBFiles(t *testing.T) {
 	if len(dbs) != 0 {
 		t.Errorf("The db should contain %d entries, but it contains %d", 0, len(dbs))
 	}
-
 }
 
 func TestGetPkgsToUpdate(t *testing.T) {
@@ -245,7 +243,7 @@ func TestGetPkgsToUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []PkgToUpdate{PkgToUpdate{PackageName: "webkit", RepoName: "foo", Arch: "x86_64", DownloadURL: "/repo/foo/webkit-2.4.1-1-x86_64", FileExt: ".pkg.tar.zst"}}
+	want := []PkgToUpdate{{PackageName: "webkit", RepoName: "foo", Arch: "x86_64", DownloadURL: "/repo/foo/webkit-2.4.1-1-x86_64", FileExt: ".pkg.tar.zst"}}
 	if !cmp.Equal(got, want) {
 		t.Errorf("\ngot  %v\nwant %v", got, want)
 	}

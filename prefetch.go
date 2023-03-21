@@ -204,7 +204,6 @@ func cleanPrefetchDB() {
 					log.Printf("warning: deleting %v link due to migrating to a newer version of pacoloco. Simply do 'pacman -Sy' on repo %v to fix the prefetching.", mirror.URL, mirror.RepoName)
 					deleteMirrorDBFromDB(mirror)
 				}
-
 			} else {
 				// there is no repo with that name, I delete the mirrorDB entry
 				log.Printf("Deleting %v, repo %v does not exist", mirror.URL, mirror.RepoName)

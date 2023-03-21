@@ -10,11 +10,13 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const DefaultPort = 9129
-const DefaultCacheDir = "/var/cache/pacoloco"
-const DefaultTTLUnaccessed = 30
-const DefaultTTLUnupdated = 200
-const DefaultDBName = "sqlite-pkg-cache.db"
+const (
+	DefaultPort          = 9129
+	DefaultCacheDir      = "/var/cache/pacoloco"
+	DefaultTTLUnaccessed = 30
+	DefaultTTLUnupdated  = 200
+	DefaultDBName        = "sqlite-pkg-cache.db"
+)
 
 type Repo struct {
 	URL                  string    `yaml:"url"`
@@ -56,7 +58,7 @@ func initURLsChannel(name string, repo *Repo) {
 }
 
 func parseConfig(raw []byte) *Config {
-	var result = Config{
+	result := Config{
 		CacheDir: DefaultCacheDir,
 		Port:     DefaultPort,
 		Prefetch: nil,

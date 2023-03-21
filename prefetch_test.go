@@ -49,6 +49,7 @@ func testDbConnectionHelper(filepath string) *sql.DB {
 	}
 	return db
 }
+
 func TestSetupPrefetch(t *testing.T) {
 	tmpDir := testSetupHelper(t)
 	setupPrefetch()
@@ -79,6 +80,7 @@ func TestSetupPrefetch(t *testing.T) {
 		}
 	}
 }
+
 func TestSetupPrefetchTicker(t *testing.T) {
 	testSetupHelper(t)
 	setupPrefetch()
@@ -188,7 +190,6 @@ func TestUpdateDBRequestedFile(t *testing.T) {
 			t.Fatalf("updateDBRequestedFile shouldn't have created multiple entries\n")
 		}
 	}
-
 }
 
 func TestUpdateDBPrefetchedFile(t *testing.T) {
@@ -198,10 +199,10 @@ func TestUpdateDBPrefetchedFile(t *testing.T) {
 	// add a fake download entry
 	updateDBRequestedFile("foo", "webkit-2.3.1-1-x86_64.pkg.tar.zst")
 	oldPkgPath := path.Join(tmpDir, "pkgs", "foo", "webkit-2.3.1-1-x86_64.pkg.tar.zst")
-	if err := os.MkdirAll(path.Join(tmpDir, "pkgs"), 0755); err != nil {
+	if err := os.MkdirAll(path.Join(tmpDir, "pkgs"), 0o755); err != nil {
 		log.Fatal(err)
 	}
-	if err := os.MkdirAll(path.Join(tmpDir, "pkgs", "foo"), 0755); err != nil {
+	if err := os.MkdirAll(path.Join(tmpDir, "pkgs", "foo"), 0o755); err != nil {
 		log.Fatal(err)
 	}
 	if _, err := os.Create(oldPkgPath); err != nil {
@@ -296,10 +297,10 @@ func TestPurgePkgIfExists(t *testing.T) {
 	setupPrefetch()
 	updateDBRequestedFile("foo", "webkit-2.3.1-1-x86_64.pkg.tar.zst")
 	oldPkgPath := path.Join(tmpDir, "pkgs", "foo", "webkit-2.3.1-1-x86_64.pkg.tar.zst")
-	if err := os.MkdirAll(path.Join(tmpDir, "pkgs"), 0755); err != nil {
+	if err := os.MkdirAll(path.Join(tmpDir, "pkgs"), 0o755); err != nil {
 		log.Fatal(err)
 	}
-	if err := os.MkdirAll(path.Join(tmpDir, "pkgs", "foo"), 0755); err != nil {
+	if err := os.MkdirAll(path.Join(tmpDir, "pkgs", "foo"), 0o755); err != nil {
 		log.Fatal(err)
 	}
 	if _, err := os.Create(oldPkgPath); err != nil {
@@ -342,10 +343,10 @@ func TestCleanPrefetchDB(t *testing.T) {
 	setupPrefetch()
 	updateDBRequestedFile("foo", "webkit-2.3.1-1-x86_64.pkg.tar.zst")
 	oldPkgPath := path.Join(tmpDir, "pkgs", "foo", "webkit-2.3.1-1-x86_64.pkg.tar.zst")
-	if err := os.MkdirAll(path.Join(tmpDir, "pkgs"), 0755); err != nil {
+	if err := os.MkdirAll(path.Join(tmpDir, "pkgs"), 0o755); err != nil {
 		log.Fatal(err)
 	}
-	if err := os.MkdirAll(path.Join(tmpDir, "pkgs", "foo"), 0755); err != nil {
+	if err := os.MkdirAll(path.Join(tmpDir, "pkgs", "foo"), 0o755); err != nil {
 		log.Fatal(err)
 	}
 	if _, err := os.Create(oldPkgPath); err != nil {
@@ -424,7 +425,6 @@ func TestCleanPrefetchDB(t *testing.T) {
 	if exists {
 		t.Errorf("File %v not should exist", oldPkgPath)
 	}
-
 }
 
 func TestPrefetchAllPkgs(t *testing.T) {
@@ -434,6 +434,7 @@ func TestPrefetchAllPkgs(t *testing.T) {
 	cleanPrefetchDB()
 	prefetchAllPkgs()
 }
+
 func TestPrefetchPackages(t *testing.T) {
 	// Fully tested in integration test
 	testSetupHelper(t)
@@ -458,5 +459,4 @@ func TestGetCronDuration(t *testing.T) {
 	if got != expectedDuration {
 		t.Errorf("getCronDuration() = %v, want %v", got, expectedDuration)
 	}
-
 }

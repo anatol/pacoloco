@@ -223,7 +223,6 @@ func testPrefetchRequestExistingRepoWithDb(t *testing.T) {
 	os.Chtimes(dbAtMirror, dbModTime, dbModTime)
 
 	err := prefetchRequest("/repo/repo2/test.db", "")
-
 	if err != nil {
 		t.Errorf("Expected success, got %v", err)
 	}

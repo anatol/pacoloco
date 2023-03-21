@@ -11,10 +11,12 @@ import (
 	"time"
 )
 
-var mirrorURL string
-var pacolocoURL string
-var testPacolocoDir string
-var mirrorDir string
+var (
+	mirrorURL       string
+	pacolocoURL     string
+	testPacolocoDir string
+	mirrorDir       string
+)
 
 // sets up the urls channel so the tests can use it.
 func makeTestRepo() *Repo {

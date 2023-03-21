@@ -167,7 +167,8 @@ func getPackageFromFilenameAndRepo(repoName string, fileName string) (Package, e
 		version := matches[2]
 		arch := matches[3]
 		now := time.Now()
-		return Package{PackageName,
+		return Package{
+			PackageName,
 			version,
 			arch,
 			repoName,
@@ -233,6 +234,7 @@ func updateDBRequestedDB(repoName string, path_ string, filename string) (Mirror
 	}
 	return mirror, nil
 }
+
 func getAllMirrorsDB() []MirrorDB {
 	var mirrorDBs []MirrorDB
 	prefetchDB.Find(&mirrorDBs)

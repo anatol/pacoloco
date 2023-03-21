@@ -27,7 +27,8 @@ type testTarDB struct {
 // testing content for a db
 func getTestTarDB() []testTarDB {
 	return []testTarDB{
-		testTarDB{PkgName: "acl-2.3.1-1",
+		{
+			PkgName: "acl-2.3.1-1",
 			Content: `%FILENAME%
 acl-2.3.1-1-x86_64.pkg.tar.zst
 
@@ -85,8 +86,10 @@ libacl.so=1-64
 
 %DEPENDS%
 attr
-libattr.so`},
-		testTarDB{PkgName: "attr-2.5.1-1",
+libattr.so`,
+		},
+		{
+			PkgName: "attr-2.5.1-1",
 			Content: `%FILENAME%
 attr-2.5.1-1-x86_64.pkg.tar.zst
 
@@ -148,7 +151,9 @@ glibc
 %MAKEDEPENDS%
 gettext
 
-`}}
+`,
+		},
+	}
 }
 
 // creates a test tar file
@@ -174,7 +179,6 @@ func createDbTarball(tarballFilePath string, content []testTarDB) {
 
 // adds a file to the tar under pkgname/desc
 func addFileToTarWriter(pkgName string, content string, tarWriter *tar.Writer) {
-
 	header := &tar.Header{
 		Name: path.Join(pkgName, "desc"),
 		Size: int64(len(content)),
@@ -258,6 +262,7 @@ func TestUncompressGZBomb(t *testing.T) {
 		log.Fatal("It fully extracted the gzip bomb, this shouldn't happen")
 	}
 }
+
 func TestExtractFilenamesFromTar(t *testing.T) {
 	tmpDir := testSetupHelper(t)
 	filePath := path.Join(tmpDir, "test.gz")

@@ -40,8 +40,8 @@ var expectedURLs = []string{
 }
 
 func TestParseMirrorlist(t *testing.T) {
-	var temp = t.TempDir()
-	var tmpMirrorfile = path.Join(temp, "tmpMirrorFile")
+	temp := t.TempDir()
+	tmpMirrorfile := path.Join(temp, "tmpMirrorFile")
 
 	f, err := os.Create(tmpMirrorfile)
 	if err == nil {
@@ -64,8 +64,8 @@ func TestParseMirrorlist(t *testing.T) {
 }
 
 func TestGetCurrentURLs(t *testing.T) {
-	var temp = t.TempDir()
-	var tmpMirrorfile = path.Join(temp, "tmpMirrorFile")
+	temp := t.TempDir()
+	tmpMirrorfile := path.Join(temp, "tmpMirrorFile")
 
 	f, err := os.Create(tmpMirrorfile)
 	if err == nil {
