@@ -16,6 +16,13 @@ var pacolocoURL string
 var testPacolocoDir string
 var mirrorDir string
 
+// sets up the urls channel so the tests can use it.
+func makeTestRepo() *Repo {
+	repo := &Repo{}
+	initURLsChannel("", repo)
+	return repo
+}
+
 // the same as TestPacolocoIntegration, but with prefetching things
 func TestPacolocoIntegrationWithPrefetching(t *testing.T) {
 	var err error
@@ -43,7 +50,7 @@ func TestPacolocoIntegrationWithPrefetching(t *testing.T) {
 		Port:            -1,
 		PurgeFilesAfter: -1,
 		DownloadTimeout: 999,
-		Repos:           make(map[string]Repo),
+		Repos:           make(map[string]*Repo),
 		Prefetch:        &RefreshPeriod{Cron: "0 0 " + fmt.Sprint(notInvokingPrefetchTime.Hour()) + " ? * 1#1 *"},
 	}
 	setupPrefetch()
@@ -88,7 +95,7 @@ func TestPacolocoIntegration(t *testing.T) {
 		Port:            -1,
 		PurgeFilesAfter: -1,
 		DownloadTimeout: 999,
-		Repos:           make(map[string]Repo),
+		Repos:           make(map[string]*Repo),
 		Prefetch:        nil,
 	}
 
@@ -135,7 +142,7 @@ func testRequestNonExistingDb(t *testing.T) {
 
 func testRequestExistingRepo(t *testing.T) {
 	// Requesting existing repo
-	config.Repos["repo1"] = Repo{}
+	config.Repos["repo1"] = makeTestRepo()
 	defer delete(config.Repos, "repo1")
 
 	req := httptest.NewRequest("GET", pacolocoURL+"/repo/repo1/test.db", nil)
@@ -154,9 +161,9 @@ func testRequestExistingRepo(t *testing.T) {
 
 func testRequestExistingRepoWithDb(t *testing.T) {
 	// Requesting existing repo
-	config.Repos["repo2"] = Repo{
-		URL: mirrorURL + "/mirror2",
-	}
+	repo2 := makeTestRepo()
+	repo2.URL = mirrorURL + "/mirror2"
+	config.Repos["repo2"] = repo2
 	defer delete(config.Repos, "repo2")
 
 	if err := os.Mkdir(path.Join(mirrorDir, "mirror2"), os.ModePerm); err != nil {
@@ -262,9 +269,9 @@ func testRequestExistingRepoWithDb(t *testing.T) {
 
 func testRequestPackageFile(t *testing.T) {
 	// Requesting existing repo
-	config.Repos["repo3"] = Repo{
-		URL: mirrorURL + "/mirror3",
-	}
+	repo3 := makeTestRepo()
+	repo3.URL = mirrorURL + "/mirror3"
+	config.Repos["repo3"] = repo3
 	defer delete(config.Repos, "repo3")
 
 	if err := os.Mkdir(path.Join(mirrorDir, "mirror3"), os.ModePerm); err != nil {
@@ -362,9 +369,12 @@ func testRequestPackageFile(t *testing.T) {
 }
 
 func testFailover(t *testing.T) {
-	config.Repos["failover"] = Repo{
-		URLs: []string{mirrorURL + "/no-mirror", mirrorURL + "/mirror-failover"},
+	failover := makeTestRepo()
+	failover.URLs = []string{
+		mirrorURL + "/no-mirror",
+		mirrorURL + "/mirror-failover",
 	}
+	config.Repos["failover"] = failover
 	defer delete(config.Repos, "failover")
 
 	if err := os.Mkdir(path.Join(mirrorDir, "mirror-failover"), os.ModePerm); err != nil {
