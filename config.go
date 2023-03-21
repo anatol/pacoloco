@@ -20,6 +20,7 @@ type Repo struct {
 	URL                  string    `yaml:"url"`
 	URLs                 []string  `yaml:"urls"`
 	Mirrorlist           string    `yaml:"mirrorlist"`
+	PurgeFilesAfter      *int      `yaml:"purge_files_after"`
 	LastMirrorlistCheck  time.Time `yaml:"-"`
 	LastModificationTime time.Time `yaml:"-"`
 	urlsChan             chan chan []string
@@ -88,6 +89,15 @@ func parseConfig(raw []byte) *Config {
 			}
 			log.Fatalf("mirrorlist file %v for repo %v does not exist or isn't readable for user %v", repo.Mirrorlist, name, u.Username)
 		}
+
+		purge := result.PurgeFilesAfter
+		if repo.PurgeFilesAfter != nil {
+			purge = *repo.PurgeFilesAfter
+		}
+		if 0 < purge && purge < 10*60 {
+			log.Fatalf("'purge_files_after' period is too low (%v) please specify at least 10 minutes", purge)
+		}
+
 		initURLsChannel(name, repo)
 	}
 

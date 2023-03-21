@@ -111,10 +111,8 @@ func main() {
 		setupPrefetch() // enable refresh
 	}
 
-	if config.PurgeFilesAfter != 0 {
-		cleanupTicker := setupPurgeStaleFilesRoutine()
-		defer cleanupTicker.Stop()
-	}
+	cleanupTicker := setupPurgeStaleFilesRoutine()
+	defer cleanupTicker.Stop()
 
 	if config.HttpProxy != "" {
 		proxyUrl, err := url.Parse(config.HttpProxy)
