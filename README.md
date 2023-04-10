@@ -100,7 +100,7 @@ repos:
     url: https://download.sublimetext.com/arch/stable/x86_64
   archlinux-reflector:
     mirrorlist: /etc/pacman.d/reflector_mirrorlist # Be careful! Check that pacoloco URL is NOT included in that file!
-http_proxy: http://foo.company.com:8989
+http_proxy: http://foo.company.com:8989 # Enable this only if you have pacoloco running behind a proxy
 user_agent: Pacoloco/1.2
 prefetch: # optional section, add it if you want to enable prefetching
   cron: 0 0 3 * * * * # standard cron expression (https://en.wikipedia.org/wiki/Cron#CRON_expression) to define how frequently prefetch, see https://github.com/gorhill/cronexpr#implementation for documentation.
@@ -114,7 +114,7 @@ prefetch: # optional section, add it if you want to enable prefetching
 * `port` is the server port.
 * `download_timeout` is a timeout (in seconds) for internet->cache downloads. If a remote server gets slow and file download takes longer than this will be terminated. Default value is `0` that means no timeout.
 * `repos` is a list of repositories to mirror. Each repo needs `name` and url of its Arch mirrors. Note that url can be specified either with `url` or `urls` properties, one and only one can be used for each repo configuration.
-* `http_proxy` proxy configuration that is used to fetch files from repositories.
+* `http_proxy` is only to be used if you have pacoloco running behind a proxy
 * `user_agent` user agent used to fetch the files from repositories. Default value is `Pacoloco/1.2`.
 * The `prefetch` section allows to enable packages prefetching. Comment it out to disable it.
 * To test out if the cron value does what you'd expect to do, check cronexpr [implementation](https://github.com/gorhill/cronexpr#implementation) or [test it](https://play.golang.org/p/IK2hrIV7tUk)
