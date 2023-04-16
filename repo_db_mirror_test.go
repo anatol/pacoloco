@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/klauspost/compress/zstd"
 )
 
 // https://gist.github.com/maximilien/328c9ac19ab0a158a8df  slightly modified to create a fake package
@@ -193,7 +194,6 @@ func addFileToTarWriter(pkgName string, content string, tarWriter *tar.Writer) {
 }
 
 // Uncompresses a gzip file
-// TODO set some limits to avoid OOM with gzip bombs in uncompressGZ.
 func TestUncompressGZ(t *testing.T) {
 	err := uncompressGZ("nope", "nope")
 	tmpDir := testSetupHelper(t)
@@ -224,15 +224,48 @@ func TestUncompressGZ(t *testing.T) {
 	}
 }
 
-func TestUncompressGZBomb(t *testing.T) {
+func TestUncompressZSTD(t *testing.T) {
+	err := uncompressZSTD("nope", "nope")
+	tmpDir := testSetupHelper(t)
+	if err == nil {
+		t.Errorf("Should raise an error")
+	}
+	filePath := path.Join(tmpDir, "test.zstd")
+	testString := ``
+	zstdfile, err := os.Create(filePath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	writer, err := zstd.NewWriter(zstdfile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	reader := strings.NewReader(testString)
+	if _, err = io.Copy(writer, reader); err != nil {
+		log.Fatal(err)
+	}
+	writer.Close()
+	if err = uncompressZSTD(filePath, filePath+".uncompressed"); err != nil {
+		log.Fatal(err)
+	}
+	byteStr, err := ioutil.ReadFile(filePath + ".uncompressed")
+	if string(byteStr) != testString {
+		t.Errorf("Expected %v, got %v ", testString, string(byteStr))
+	}
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func TestUncompressZSTDBomb(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping testing in short mode")
 	}
 	tmpDir := testSetupHelper(t)
-	filePath := path.Join(tmpDir, "test.gz")
-	var gzipBombSize int64
-	gzipBombSize = 120 * 1024 * 1024
-	gzipfile, err := os.Create(filePath)
+	filePath := path.Join(tmpDir, "test.zstd")
+	var zstdBombSize int64
+	zstdBombSize = 120 * 1024 * 1024
+	zstdfile, err := os.Create(filePath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -241,8 +274,8 @@ func TestUncompressGZBomb(t *testing.T) {
 		t.Skip("Cannot open /dev/zero, skipping gzip bomb test")
 	}
 	defer zero.Close()
-	writer := gzip.NewWriter(gzipfile)
-	reader := io.LimitReader(bufio.NewReader(zero), gzipBombSize)
+	writer := gzip.NewWriter(zstdfile)
+	reader := io.LimitReader(bufio.NewReader(zero), zstdBombSize)
 	if _, err = io.Copy(writer, reader); err != nil {
 		log.Fatal(err)
 	}
@@ -258,8 +291,8 @@ func TestUncompressGZBomb(t *testing.T) {
 		return
 	}
 	size := fi.Size()
-	if size >= gzipBombSize {
-		log.Fatal("It fully extracted the gzip bomb, this shouldn't happen")
+	if size >= zstdBombSize {
+		log.Fatal("It fully extracted the zstd bomb, this shouldn't happen")
 	}
 }
 
