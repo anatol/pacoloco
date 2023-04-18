@@ -52,3 +52,15 @@ func TestPurge(t *testing.T) {
 		t.Fail()
 	}
 }
+
+func TestPurgeSeconds(t *testing.T) {
+	r := Repo{}
+	if r.purgeSeconds() != config.PurgeFilesAfter {
+		t.Fail()
+	}
+
+	n := 99
+	if r.PurgeFilesAfter = &n; r.purgeSeconds() != n {
+		t.Fail()
+	}
+}

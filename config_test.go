@@ -9,6 +9,19 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
+func (r *Repo) Equal(x interface{}) bool {
+	s, ok := x.(*Repo)
+	return ok && r.URL == s.URL &&
+		cmp.Equal(r.URLs, s.URLs) &&
+		r.Mirrorlist == s.Mirrorlist &&
+		r.LastMirrorlistCheck == s.LastMirrorlistCheck &&
+		r.LastModificationTime == s.LastModificationTime &&
+		(r.PurgeFilesAfter == s.PurgeFilesAfter ||
+			(r.PurgeFilesAfter != nil &&
+				s.PurgeFilesAfter != nil &&
+				*r.PurgeFilesAfter == *s.PurgeFilesAfter))
+}
+
 // test that `parseConfig()` can successfully load YAML config
 func TestLoadConfig(t *testing.T) {
 	temp := t.TempDir()
@@ -56,7 +69,7 @@ repos:
 		DownloadTimeout: 200,
 		Prefetch:        &RefreshPeriod{Cron: "0 0 3 * * * *", TTLUnaccessed: 5, TTLUnupdated: 200},
 	}
-	if !cmp.Equal(*got, *want, cmpopts.IgnoreFields(Config{}, "Prefetch"), cmpopts.IgnoreUnexported(Repo{})) {
+	if !cmp.Equal(*got, *want, cmpopts.IgnoreFields(Config{}, "Prefetch")) {
 		t.Errorf("got %v, want %v", *got, *want)
 	}
 	gotR := *(*got).Prefetch
@@ -88,7 +101,7 @@ repos:
 		Prefetch:        nil,
 	}
 
-	if !cmp.Equal(*got, *want, cmpopts.IgnoreUnexported(Repo{})) {
+	if !cmp.Equal(*got, *want) {
 		t.Errorf("got %v, want %v", *got, *want)
 	}
 }
@@ -114,7 +127,50 @@ repos:
 		Prefetch:        nil,
 	}
 
-	if !cmp.Equal(*got, *want, cmpopts.IgnoreUnexported(Repo{})) {
+	if !cmp.Equal(*got, *want) {
+		t.Errorf("got %v, want %v", *got, *want)
+	}
+}
+
+func TestPerRepoPurgeFilesAfter(t *testing.T) {
+	zero := 0
+	oneHundredThousand := 100000
+	got := parseConfig([]byte(`
+cache_dir: /tmp
+purge_files_after: 30000
+repos:
+  archlinux:
+    url: http://mirrors.kernel.org/archlinux
+  anotherlinux:
+    url: http://dev.null
+    purge_files_after: 0
+  yetanotherlinux:
+    url: http://dev.zero
+    purge_files_after: 100000
+
+`))
+	want := &Config{
+		CacheDir: `/tmp`,
+		Port:     9129,
+		Repos: map[string]*Repo{
+			"archlinux": &Repo{
+				URL: "http://mirrors.kernel.org/archlinux",
+			},
+			"anotherlinux": &Repo{
+				URL:             "http://dev.null",
+				PurgeFilesAfter: &zero,
+			},
+			"yetanotherlinux": &Repo{
+				URL:             "http://dev.zero",
+				PurgeFilesAfter: &oneHundredThousand,
+			},
+		},
+		PurgeFilesAfter: 30000,
+		DownloadTimeout: 0,
+		Prefetch:        nil,
+	}
+
+	if !cmp.Equal(*got, *want) {
 		t.Errorf("got %v, want %v", *got, *want)
 	}
 }
@@ -153,7 +209,7 @@ repos:
 		DownloadTimeout: 200,
 		Prefetch:        &RefreshPeriod{Cron: "0 0 3 * * * *", TTLUnaccessed: 5, TTLUnupdated: 200},
 	}
-	if !cmp.Equal(*got, *want, cmpopts.IgnoreFields(Config{}, "Prefetch"), cmpopts.IgnoreUnexported(Repo{})) {
+	if !cmp.Equal(*got, *want, cmpopts.IgnoreFields(Config{}, "Prefetch")) {
 		t.Errorf("got %v, want %v", *got, *want)
 	}
 	gotR := *(*got).Prefetch
@@ -182,7 +238,7 @@ repos:
 			},
 		},
 	}
-	if !cmp.Equal(*got, *want, cmpopts.IgnoreUnexported(Repo{})) {
+	if !cmp.Equal(*got, *want) {
 		t.Errorf("got %v, want %v", *got, *want)
 	}
 }
