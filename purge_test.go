@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io/ioutil"
 	"log"
 	"os"
 	"path"
@@ -12,7 +11,7 @@ import (
 func TestPurge(t *testing.T) {
 	purgeFilesAfter := 3600 * 24 * 30 // purge files if they are not accessed for 30 days
 
-	testPacolocoDir, err := ioutil.TempDir(os.TempDir(), "*-pacoloco-repo")
+	testPacolocoDir, err := os.MkdirTemp(os.TempDir(), "*-pacoloco-repo")
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -5,7 +5,6 @@ import (
 	"bufio"
 	"compress/gzip"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path"
@@ -215,7 +214,7 @@ func TestUncompressGZ(t *testing.T) {
 	if err = uncompressGZ(filePath, filePath+".uncompressed"); err != nil {
 		log.Fatal(err)
 	}
-	byteStr, err := ioutil.ReadFile(filePath + ".uncompressed")
+	byteStr, err := os.ReadFile(filePath + ".uncompressed")
 	if string(byteStr) != testString {
 		t.Errorf("Expected %v, got %v ", testString, string(byteStr))
 	}
@@ -248,7 +247,7 @@ func TestUncompressZSTD(t *testing.T) {
 	if err = uncompressZSTD(filePath, filePath+".uncompressed"); err != nil {
 		log.Fatal(err)
 	}
-	byteStr, err := ioutil.ReadFile(filePath + ".uncompressed")
+	byteStr, err := os.ReadFile(filePath + ".uncompressed")
 	if string(byteStr) != testString {
 		t.Errorf("Expected %v, got %v ", testString, string(byteStr))
 	}

@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -99,7 +98,7 @@ func main() {
 	log.SetFlags(log.Lshortfile)
 
 	log.Print("Reading config file from ", *configFile)
-	yaml, err := ioutil.ReadFile(*configFile)
+	yaml, err := os.ReadFile(*configFile)
 	if err != nil {
 		log.Fatal(err)
 	}

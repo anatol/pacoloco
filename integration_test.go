@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -28,7 +28,7 @@ func makeTestRepo() *Repo {
 // the same as TestPacolocoIntegration, but with prefetching things
 func TestPacolocoIntegrationWithPrefetching(t *testing.T) {
 	var err error
-	mirrorDir, err = ioutil.TempDir(os.TempDir(), "*-pacoloco-mirror")
+	mirrorDir, err = os.MkdirTemp(os.TempDir(), "*-pacoloco-mirror")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func TestPacolocoIntegrationWithPrefetching(t *testing.T) {
 	mirrorURL = mirror.URL
 
 	// Now setup pacoloco cache dir
-	testPacolocoDir, err = ioutil.TempDir(os.TempDir(), "*-pacoloco-repo")
+	testPacolocoDir, err = os.MkdirTemp(os.TempDir(), "*-pacoloco-repo")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestPacolocoIntegrationWithPrefetching(t *testing.T) {
 
 func TestPacolocoIntegration(t *testing.T) {
 	var err error
-	mirrorDir, err = ioutil.TempDir(os.TempDir(), "*-pacoloco-mirror")
+	mirrorDir, err = os.MkdirTemp(os.TempDir(), "*-pacoloco-mirror")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestPacolocoIntegration(t *testing.T) {
 	mirrorURL = mirror.URL
 
 	// Now setup pacoloco cache dir
-	testPacolocoDir, err = ioutil.TempDir(os.TempDir(), "*-pacoloco-repo")
+	testPacolocoDir, err = os.MkdirTemp(os.TempDir(), "*-pacoloco-repo")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +176,7 @@ func testRequestExistingRepoWithDb(t *testing.T) {
 	dbAtMirror := path.Join(mirrorDir, "mirror2", "test.db")
 	dbFileContent := "pacoloco/mirror2.db"
 
-	if err := ioutil.WriteFile(dbAtMirror, []byte(dbFileContent), os.ModePerm); err != nil {
+	if err := os.WriteFile(dbAtMirror, []byte(dbFileContent), os.ModePerm); err != nil {
 		t.Fatal(err)
 	}
 	// Make the mirror file old enough to distinguish it from the subsequent modifications
@@ -192,7 +192,7 @@ func testRequestExistingRepoWithDb(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Errorf("200 response expected, got %v", resp.StatusCode)
 	}
-	content, err := ioutil.ReadAll(w.Body)
+	content, err := io.ReadAll(w.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +214,7 @@ func testRequestExistingRepoWithDb(t *testing.T) {
 		t.Error("repo2 repo should be cached")
 	}
 	defer os.RemoveAll(path.Join(testPacolocoDir, "pkgs", "repo2"))
-	content, err = ioutil.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo2", "test.db"))
+	content, err = os.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo2", "test.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +224,7 @@ func testRequestExistingRepoWithDb(t *testing.T) {
 
 	// Now let's modify the db content, pacoloco should refetch it
 	dbFileContent = "This is a new content"
-	if err := ioutil.WriteFile(dbAtMirror, []byte(dbFileContent), os.ModePerm); err != nil {
+	if err := os.WriteFile(dbAtMirror, []byte(dbFileContent), os.ModePerm); err != nil {
 		t.Fatal(err)
 	}
 	newDbModTime := time.Now()
@@ -239,7 +239,7 @@ func testRequestExistingRepoWithDb(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Errorf("200 response expected, got %v", resp.StatusCode)
 	}
-	content, err = ioutil.ReadAll(w.Body)
+	content, err = io.ReadAll(w.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +251,7 @@ func testRequestExistingRepoWithDb(t *testing.T) {
 	if _, err := os.Stat(path.Join(testPacolocoDir, "pkgs", "repo2")); os.IsNotExist(err) {
 		t.Error("repo2 repo should be cached")
 	}
-	content, err = ioutil.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo2", "test.db"))
+	content, err = os.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo2", "test.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -283,7 +283,7 @@ func testRequestPackageFile(t *testing.T) {
 
 	pkgAtMirror := path.Join(mirrorDir, "mirror3", "test-1-any.pkg.tar.zst")
 	pkgFileContent := "a package"
-	if err := ioutil.WriteFile(pkgAtMirror, []byte(pkgFileContent), os.ModePerm); err != nil {
+	if err := os.WriteFile(pkgAtMirror, []byte(pkgFileContent), os.ModePerm); err != nil {
 		t.Fatal(err)
 	}
 	// Make the mirror file old enough to distinguish it from the subsequent modifications
@@ -302,7 +302,7 @@ func testRequestPackageFile(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Errorf("200 response expected, got %v", resp.StatusCode)
 	}
-	content, err := ioutil.ReadAll(w.Body)
+	content, err := io.ReadAll(w.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -320,7 +320,7 @@ func testRequestPackageFile(t *testing.T) {
 	}
 
 	// check that pkg is cached
-	content, err = ioutil.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo3", "test-1-any.pkg.tar.zst"))
+	content, err = os.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo3", "test-1-any.pkg.tar.zst"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -329,7 +329,7 @@ func testRequestPackageFile(t *testing.T) {
 	}
 
 	// Now let's modify the db content, pacoloco should not refetch it
-	if err := ioutil.WriteFile(pkgAtMirror, []byte("This is a new content"), os.ModePerm); err != nil {
+	if err := os.WriteFile(pkgAtMirror, []byte("This is a new content"), os.ModePerm); err != nil {
 		t.Fatal(err)
 	}
 	newDbModTime := time.Now()
@@ -344,7 +344,7 @@ func testRequestPackageFile(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Errorf("200 response expected, got %v", resp.StatusCode)
 	}
-	content, err = ioutil.ReadAll(w.Body)
+	content, err = io.ReadAll(w.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -353,7 +353,7 @@ func testRequestPackageFile(t *testing.T) {
 	}
 
 	// check that repo is cached
-	content, err = ioutil.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo3", "test-1-any.pkg.tar.zst"))
+	content, err = os.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo3", "test-1-any.pkg.tar.zst"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -386,7 +386,7 @@ func testFailover(t *testing.T) {
 
 	pkgAtMirror := path.Join(mirrorDir, "mirror-failover", "test-1-any.pkg.tar.zst")
 	pkgFileContent := "failover content"
-	if err := ioutil.WriteFile(pkgAtMirror, []byte(pkgFileContent), os.ModePerm); err != nil {
+	if err := os.WriteFile(pkgAtMirror, []byte(pkgFileContent), os.ModePerm); err != nil {
 		t.Fatal(err)
 	}
 
@@ -400,7 +400,7 @@ func testFailover(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Errorf("200 response expected, got %v", resp.StatusCode)
 	}
-	content, err := ioutil.ReadAll(w.Body)
+	content, err := io.ReadAll(w.Body)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"io/ioutil"
+	"io"
 	"log"
 	"os"
 	"testing"
@@ -12,7 +12,7 @@ import (
 func TestMain(m *testing.M) {
 	if os.Getenv("TEST_VERBOSE") != "1" {
 		// disable log output
-		log.SetOutput(ioutil.Discard)
+		log.SetOutput(io.Discard)
 	}
 
 	os.Exit(m.Run())

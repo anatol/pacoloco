@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -15,7 +14,7 @@ import (
 
 func TestPacolocoPrefetchIntegration(t *testing.T) {
 	var err error
-	mirrorDir, err = ioutil.TempDir(os.TempDir(), "*-pacoloco-mirror")
+	mirrorDir, err = os.MkdirTemp(os.TempDir(), "*-pacoloco-mirror")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +93,7 @@ func testPrefetchRequestPackageFile(t *testing.T) {
 
 	pkgAtMirror := path.Join(mirrorDir, "mirror3", "test-1-1-any.pkg.tar.zst")
 	pkgFileContent := "a package"
-	if err := ioutil.WriteFile(pkgAtMirror, []byte(pkgFileContent), os.ModePerm); err != nil {
+	if err := os.WriteFile(pkgAtMirror, []byte(pkgFileContent), os.ModePerm); err != nil {
 		t.Fatal(err)
 	}
 	// Make the mirror file old enough to distinguish it from the subsequent modifications
@@ -108,7 +107,7 @@ func testPrefetchRequestPackageFile(t *testing.T) {
 	if err != nil {
 		t.Errorf("Expected success, got %v", err)
 	}
-	content, err := ioutil.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo3", "test-1-1-any.pkg.tar.zst"))
+	content, err := os.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo3", "test-1-1-any.pkg.tar.zst"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +118,7 @@ func testPrefetchRequestPackageFile(t *testing.T) {
 	// Now let's modify the db content, pacoloco should refetch it, cause prefetch should force update packages
 	// This can also be useful to redownload packages with a wrong signature
 	newContent := "This is a new content"
-	if err := ioutil.WriteFile(pkgAtMirror, []byte(newContent), os.ModePerm); err != nil {
+	if err := os.WriteFile(pkgAtMirror, []byte(newContent), os.ModePerm); err != nil {
 		t.Fatal(err)
 	}
 	newDbModTime := time.Now()
@@ -131,7 +130,7 @@ func testPrefetchRequestPackageFile(t *testing.T) {
 		t.Errorf("Expected success, got %v", err)
 	}
 
-	content, err = ioutil.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo3", "test-1-1-any.pkg.tar.zst"))
+	content, err = os.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo3", "test-1-1-any.pkg.tar.zst"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -156,7 +155,7 @@ func testPrefetchFailover(t *testing.T) {
 
 	pkgAtMirror := path.Join(mirrorDir, "mirror-failover", "test-1-1-any.pkg.tar.zst")
 	pkgFileContent := "failover content"
-	if err := ioutil.WriteFile(pkgAtMirror, []byte(pkgFileContent), os.ModePerm); err != nil {
+	if err := os.WriteFile(pkgAtMirror, []byte(pkgFileContent), os.ModePerm); err != nil {
 		t.Fatal(err)
 	}
 
@@ -167,7 +166,7 @@ func testPrefetchFailover(t *testing.T) {
 	if err != nil {
 		t.Errorf("Expected success, got %v", err)
 	}
-	content, err := ioutil.ReadFile(path.Join(testPacolocoDir, "pkgs", "failover", "test-1-1-any.pkg.tar.zst"))
+	content, err := os.ReadFile(path.Join(testPacolocoDir, "pkgs", "failover", "test-1-1-any.pkg.tar.zst"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +214,7 @@ func testPrefetchRequestExistingRepoWithDb(t *testing.T) {
 	dbAtMirror := path.Join(mirrorDir, "mirror2", "test.db")
 	dbFileContent := "pacoloco/mirror2.db"
 
-	if err := ioutil.WriteFile(dbAtMirror, []byte(dbFileContent), os.ModePerm); err != nil {
+	if err := os.WriteFile(dbAtMirror, []byte(dbFileContent), os.ModePerm); err != nil {
 		t.Fatal(err)
 	}
 	// Make the mirror file old enough to distinguish it from the subsequent modifications
@@ -227,7 +226,7 @@ func testPrefetchRequestExistingRepoWithDb(t *testing.T) {
 		t.Errorf("Expected success, got %v", err)
 	}
 
-	content, err := ioutil.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo2", "test.db"))
+	content, err := os.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo2", "test.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +235,7 @@ func testPrefetchRequestExistingRepoWithDb(t *testing.T) {
 	}
 
 	defer os.RemoveAll(path.Join(testPacolocoDir, "pkgs", "repo2"))
-	content, err = ioutil.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo2", "test.db"))
+	content, err = os.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo2", "test.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +245,7 @@ func testPrefetchRequestExistingRepoWithDb(t *testing.T) {
 
 	// Now let's modify the db content, pacoloco should refetch it
 	dbFileContent = "This is a new content"
-	if err := ioutil.WriteFile(dbAtMirror, []byte(dbFileContent), os.ModePerm); err != nil {
+	if err := os.WriteFile(dbAtMirror, []byte(dbFileContent), os.ModePerm); err != nil {
 		t.Fatal(err)
 	}
 	newDbModTime := time.Now()
@@ -257,7 +256,7 @@ func testPrefetchRequestExistingRepoWithDb(t *testing.T) {
 		t.Errorf("Expected success, got %v", err)
 	}
 
-	content, err = ioutil.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo2", "test.db"))
+	content, err = os.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo2", "test.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,29 +298,29 @@ func testIntegrationPrefetchAllPkgs(t *testing.T) {
 	pkgAtCache := path.Join(config.CacheDir, "pkgs", "repo3", "acl-2.1-0-x86_64.pkg.tar.zst")
 	pkgAtCacheContent := "cached old content"
 
-	if err := ioutil.WriteFile(pkgAtCache, []byte(pkgAtCacheContent), os.ModePerm); err != nil {
+	if err := os.WriteFile(pkgAtCache, []byte(pkgAtCacheContent), os.ModePerm); err != nil {
 		t.Fatal(err)
 	}
-	if err := ioutil.WriteFile(pkgAtCache+".sig", []byte(pkgAtCacheContent), os.ModePerm); err != nil {
+	if err := os.WriteFile(pkgAtCache+".sig", []byte(pkgAtCacheContent), os.ModePerm); err != nil {
 		t.Fatal(err)
 	}
 
 	// create a package file which should be prefetched with signature (the signature is invalid but I'm not checking it) on the mirror
 	pkgAtMirror := path.Join(mirrorDir, "mirror3", "acl-2.3.1-1-x86_64.pkg.tar.zst")
 	pkgContent := "TEST content for the file to be prefetched"
-	if err := ioutil.WriteFile(pkgAtMirror, []byte(pkgContent), os.ModePerm); err != nil {
+	if err := os.WriteFile(pkgAtMirror, []byte(pkgContent), os.ModePerm); err != nil {
 		t.Fatal(err)
 	}
-	if err := ioutil.WriteFile(pkgAtMirror+".sig", []byte(pkgContent), os.ModePerm); err != nil {
+	if err := os.WriteFile(pkgAtMirror+".sig", []byte(pkgContent), os.ModePerm); err != nil {
 		t.Fatal(err)
 	}
 	// create an updated package file with a wrong extension which should NOT be prefetched with signature (the signature is invalid but I'm not checking it) on the mirror
 	wrongPkgAtMirror := path.Join(mirrorDir, "mirror3", "acl-2.3.1-1-x86_64.pkg.tar")
 	wrongPkgContent := "TEST content for the file which should NOT be prefetched"
-	if err := ioutil.WriteFile(wrongPkgAtMirror, []byte(wrongPkgContent), os.ModePerm); err != nil {
+	if err := os.WriteFile(wrongPkgAtMirror, []byte(wrongPkgContent), os.ModePerm); err != nil {
 		t.Fatal(err)
 	}
-	if err := ioutil.WriteFile(wrongPkgAtMirror+".sig", []byte(wrongPkgContent), os.ModePerm); err != nil {
+	if err := os.WriteFile(wrongPkgAtMirror+".sig", []byte(wrongPkgContent), os.ModePerm); err != nil {
 		t.Fatal(err)
 	}
 	// now if we call the prefetch procedure, it should try to prefetch the file and its signature
@@ -358,7 +357,7 @@ func testIntegrationPrefetchAllPkgs(t *testing.T) {
 		t.Errorf("The file %v should exist", pkgAtCache+".sig")
 	}
 	// Check if the content matches
-	got, err := ioutil.ReadFile(pkgAtCache)
+	got, err := os.ReadFile(pkgAtCache)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -366,7 +365,7 @@ func testIntegrationPrefetchAllPkgs(t *testing.T) {
 	if !cmp.Equal(got, want) {
 		t.Errorf("Got %v ,want %v", got, want)
 	}
-	got, err = ioutil.ReadFile(pkgAtCache + ".sig")
+	got, err = os.ReadFile(pkgAtCache + ".sig")
 	if err != nil {
 		log.Fatal(err)
 	}
