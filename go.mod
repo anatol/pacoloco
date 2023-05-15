@@ -3,6 +3,7 @@ module github.com/anatol/pacoloco
 go 1.18
 
 require (
+	github.com/djherbis/times v1.5.0
 	github.com/google/go-cmp v0.5.9
 	github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75
 	github.com/klauspost/compress v1.16.5

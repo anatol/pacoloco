@@ -4,8 +4,9 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
+
+	"github.com/djherbis/times"
 )
 
 func setupPurgeStaleFilesRoutine() *time.Ticker {
@@ -44,9 +45,8 @@ func purgeStaleFiles(cacheDir string, purgeFilesAfter int) {
 			return nil
 		}
 
-		atimeUnix := info.Sys().(*syscall.Stat_t).Atim
-		// Note that int64() is needed here, otherwise compilation fails at 32 bit platforms like armv6h. See issue #18.
-		atime := time.Unix(int64(atimeUnix.Sec), int64(atimeUnix.Nsec))
+		t := times.Get(info)
+		atime := t.AccessTime()
 		if atime.Before(removeIfOlder) {
 			log.Printf("Remove stale file %v as its access time (%v) is too old", path, atime)
 			if err := os.Remove(path); err != nil {
