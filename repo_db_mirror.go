@@ -117,7 +117,8 @@ func extractFilenamesFromTar(filePath string) ([]string, error) {
 
 // This function returns a url which should download the exactly identical pkg when sent to pacoloco except for the file extension
 func getPacolocoURL(pkg Package, prefixPath string) string {
-	return strings.ReplaceAll(("/repo/" + pkg.RepoName + "/" + prefixPath + "/" + pkg.PackageName + "-" + pkg.Version + "-" + pkg.Arch), "//", "/")
+	url := "/repo/" + pkg.RepoName + "/" + prefixPath + "/" + pkg.PackageName + "-" + pkg.Version + "-" + pkg.Arch
+	return strings.ReplaceAll(url, "//", "/")
 }
 
 // Builds a mirror package

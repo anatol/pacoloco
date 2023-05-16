@@ -15,7 +15,7 @@ import (
 
 // helper to setup the db
 func testSetupHelper(t *testing.T) string {
-	notInvokingPrefetchTime := time.Now().Add(-(time.Duration(time.Hour))) // an hour ago
+	notInvokingPrefetchTime := time.Now().Add(-time.Hour) // an hour ago
 	tmpDir := t.TempDir()
 	c := `
 cache_dir: ` + tmpDir + `

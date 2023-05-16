@@ -44,7 +44,7 @@ type MirrorDB struct {
 	LastTimeDownloaded *time.Time `gorm:"not null"`
 }
 
-// Mirror Package is the struct that contains the relevant info about a package on a mirror. It is extracted from .db files
+// MirrorPackage is the struct that contains the relevant info about a package on a mirror. It is extracted from .db files
 type MirrorPackage struct {
 	PackageName string `gorm:"primaryKey;not null"`
 	Version     string `gorm:"not null"`
@@ -94,7 +94,7 @@ func createPrefetchDB() {
 func getDBConnection() (*gorm.DB, error) {
 	dbPath := path.Join(config.CacheDir, DefaultDBName)
 	if config == nil {
-		return nil, fmt.Errorf("Config have not been parsed yet")
+		return nil, fmt.Errorf("config have not been parsed yet")
 	}
 	var newLogger logger.Interface
 	if config.LogTimestamp == true {

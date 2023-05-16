@@ -129,7 +129,7 @@ func TestGetAndDropUnusedPackages(t *testing.T) {
 	if db := prefetchDB.Save(&pkg); db.Error != nil {
 		t.Error(db.Error)
 	}
-	period := time.Duration(24 * time.Hour * 10)
+	period := 24 * time.Hour * 10
 	getAndDropUnusedPackages(period)
 	// should delete nothing
 	latestPkgInDB := getPackage("webkit", "x86_64", "foo")

@@ -29,7 +29,7 @@ func getRepoURLs(repoName string, repo *Repo) []string {
 }
 
 func parseMirrorlistURLs(repoName string, file *os.File) ([]string, error) {
-	urls := []string{}
+	var urls []string
 	scanner := bufio.NewScanner(file)
 	// resize scanner's capacity if lines are longer than 64K.
 	for scanner.Scan() {

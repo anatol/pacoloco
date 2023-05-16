@@ -261,7 +261,7 @@ func testPrefetchRequestExistingRepoWithDb(t *testing.T) {
 		t.Fatal(err)
 	}
 	if string(content) != dbFileContent {
-		t.Errorf("Pacoloco cached incorrect db content: %v\n instead of %v", string(content), string(dbFileContent))
+		t.Errorf("Pacoloco cached incorrect db content: %v\n instead of %v", string(content), dbFileContent)
 	}
 }
 

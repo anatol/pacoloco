@@ -46,7 +46,7 @@ func TestPacolocoIntegrationWithPrefetching(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(testPacolocoDir)
-	notInvokingPrefetchTime := time.Now().Add(-(time.Duration(time.Hour))) // an hour ago
+	notInvokingPrefetchTime := time.Now().Add(-time.Hour) // an hour ago
 	config = &Config{
 		CacheDir:        testPacolocoDir,
 		Port:            -1,
