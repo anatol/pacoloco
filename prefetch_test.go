@@ -150,46 +150,6 @@ func TestUpdateDBRequestedFile(t *testing.T) {
 		return
 	}
 	t.Fatalf("updateDBRequestedFile should create entries in packages\n")
-	// this one should replace the previous one
-	updateDBRequestedFile("foo", "webkit-2.5.1-1-x86_64.pkg.tar.zst")
-	// supposing two people downloaded it at the same time
-	updateDBRequestedFile("foo", "webkit-2.5.1-1-x86_64.pkg.tar.zst")
-	res, err = conn.Query("select * from packages")
-	if err != nil {
-		log.Fatal(err)
-	}
-	counter := 0
-	for res.Next() {
-		var got Package
-		now := time.Now()
-		err = res.Scan(&got.PackageName, &got.Version, &got.Arch, &got.RepoName, &got.LastTimeDownloaded, &got.LastTimeRepoUpdated)
-
-		want := Package{PackageName: "webkit", Version: "2.5.1-1", Arch: "x86_64", RepoName: "foo", LastTimeDownloaded: &now, LastTimeRepoUpdated: &now}
-		if !cmp.Equal(got, want, cmpopts.IgnoreFields(Package{}, "LastTimeDownloaded", "LastTimeRepoUpdated")) {
-			t.Errorf("\ngot  %v,\nwant %v", got, want)
-		}
-		dist := want.LastTimeDownloaded.Sub(*got.LastTimeDownloaded)
-		if dist < -5*time.Second {
-			t.Errorf("Unexpected result, got.LastTimeDownloaded is wrong")
-		}
-		if dist > 5*time.Second {
-			t.Errorf("got %d, want %d", dist, 5*time.Second)
-		}
-		dist = want.LastTimeRepoUpdated.Sub(*got.LastTimeRepoUpdated)
-		if dist < -5*time.Second {
-			t.Errorf("Unexpected result, got.LastTimeRepoUpdated is wrong")
-		}
-		if want.LastTimeRepoUpdated.Sub(*got.LastTimeRepoUpdated) > 5*time.Second {
-			t.Errorf("got %d, want %d", want.LastTimeRepoUpdated.Sub(*got.LastTimeRepoUpdated), 5*time.Second)
-		}
-		if err != nil {
-			log.Fatal(err)
-		}
-		counter++
-		if counter > 1 {
-			t.Fatalf("updateDBRequestedFile shouldn't have created multiple entries\n")
-		}
-	}
 }
 
 func TestUpdateDBPrefetchedFile(t *testing.T) {
