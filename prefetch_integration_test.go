@@ -66,7 +66,7 @@ func testPrefetchRequestNonExistingDb(t *testing.T) {
 
 func testPrefetchRequestExistingRepo(t *testing.T) {
 	// Requesting existing repo
-	config.Repos["repo1"] = makeTestRepo()
+	config.Repos["repo1"] = &Repo{}
 	defer delete(config.Repos, "repo1")
 
 	if err := prefetchRequest("/repo/repo1/test.db", ""); err == nil {
@@ -81,8 +81,9 @@ func testPrefetchRequestExistingRepo(t *testing.T) {
 
 func testPrefetchRequestPackageFile(t *testing.T) {
 	// Requesting existing repo
-	repo3 := makeTestRepo()
-	repo3.URL = mirrorURL + "/mirror3"
+	repo3 := &Repo{
+		URL: mirrorURL + "/mirror3",
+	}
 	config.Repos["repo3"] = repo3
 	defer delete(config.Repos, "repo3")
 
@@ -140,10 +141,11 @@ func testPrefetchRequestPackageFile(t *testing.T) {
 }
 
 func testPrefetchFailover(t *testing.T) {
-	failover := makeTestRepo()
-	failover.URLs = []string{
-		mirrorURL + "/no-mirror",
-		mirrorURL + "/mirror-failover",
+	failover := &Repo{
+		URLs: []string{
+			mirrorURL + "/no-mirror",
+			mirrorURL + "/mirror-failover",
+		},
 	}
 	config.Repos["failover"] = failover
 	defer delete(config.Repos, "failover")
@@ -177,8 +179,9 @@ func testPrefetchFailover(t *testing.T) {
 
 // prefetch an actual db and parses it
 func testPrefetchRealDB(t *testing.T) {
-	repo2 := makeTestRepo()
-	repo2.URL = mirrorURL + "/mirror2"
+	repo2 := &Repo{
+		URL: mirrorURL + "/mirror2",
+	}
 	config.Repos["repo2"] = repo2
 	defer delete(config.Repos, "repo2")
 
@@ -201,8 +204,9 @@ func testPrefetchRealDB(t *testing.T) {
 func testPrefetchRequestExistingRepoWithDb(t *testing.T) {
 	// Requesting existing repo
 
-	repo2 := makeTestRepo()
-	repo2.URL = mirrorURL + "/mirror2"
+	repo2 := &Repo{
+		URL: mirrorURL + "/mirror2",
+	}
 	config.Repos["repo2"] = repo2
 	defer delete(config.Repos, "repo2")
 
@@ -268,8 +272,9 @@ func testPrefetchRequestExistingRepoWithDb(t *testing.T) {
 // The most complete integration test for prefetching
 func testIntegrationPrefetchAllPkgs(t *testing.T) {
 	// Setting up an existing repo
-	repo3 := makeTestRepo()
-	repo3.URL = mirrorURL + "/mirror3"
+	repo3 := &Repo{
+		URL: mirrorURL + "/mirror3",
+	}
 	config.Repos["repo3"] = repo3
 	defer delete(config.Repos, "repo3")
 

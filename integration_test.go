@@ -18,12 +18,6 @@ var (
 	mirrorDir       string
 )
 
-// sets up the urls channel so the tests can use it.
-func makeTestRepo() *Repo {
-	repo := &Repo{}
-	return repo
-}
-
 // the same as TestPacolocoIntegration, but with prefetching things
 func TestPacolocoIntegrationWithPrefetching(t *testing.T) {
 	var err error
@@ -143,7 +137,7 @@ func testRequestNonExistingDb(t *testing.T) {
 
 func testRequestExistingRepo(t *testing.T) {
 	// Requesting existing repo
-	config.Repos["repo1"] = makeTestRepo()
+	config.Repos["repo1"] = &Repo{}
 	defer delete(config.Repos, "repo1")
 
 	req := httptest.NewRequest("GET", pacolocoURL+"/repo/repo1/test.db", nil)
@@ -162,8 +156,9 @@ func testRequestExistingRepo(t *testing.T) {
 
 func testRequestExistingRepoWithDb(t *testing.T) {
 	// Requesting existing repo
-	repo2 := makeTestRepo()
-	repo2.URL = mirrorURL + "/mirror2"
+	repo2 := &Repo{
+		URL: mirrorURL + "/mirror2",
+	}
 	config.Repos["repo2"] = repo2
 	defer delete(config.Repos, "repo2")
 
@@ -270,8 +265,9 @@ func testRequestExistingRepoWithDb(t *testing.T) {
 
 func testRequestPackageFile(t *testing.T) {
 	// Requesting existing repo
-	repo3 := makeTestRepo()
-	repo3.URL = mirrorURL + "/mirror3"
+	repo3 := &Repo{
+		URL: mirrorURL + "/mirror3",
+	}
 	config.Repos["repo3"] = repo3
 	defer delete(config.Repos, "repo3")
 
@@ -370,10 +366,11 @@ func testRequestPackageFile(t *testing.T) {
 }
 
 func testFailover(t *testing.T) {
-	failover := makeTestRepo()
-	failover.URLs = []string{
-		mirrorURL + "/no-mirror",
-		mirrorURL + "/mirror-failover",
+	failover := &Repo{
+		URLs: []string{
+			mirrorURL + "/no-mirror",
+			mirrorURL + "/mirror-failover",
+		},
 	}
 	config.Repos["failover"] = failover
 	defer delete(config.Repos, "failover")
