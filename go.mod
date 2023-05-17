@@ -9,7 +9,7 @@ require (
 	github.com/klauspost/compress v1.16.5
 	golang.org/x/sys v0.8.0
 	gopkg.in/yaml.v3 v3.0.1
-	gorm.io/driver/sqlite v1.5.0
+	gorm.io/driver/sqlite v1.4.4
 	gorm.io/gorm v1.25.1
 )
 
