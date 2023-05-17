@@ -212,7 +212,7 @@ func prefetchRequest(url string, optionalCustomPath string) (err error) {
 	// refresh the data in case if the file has been download while we were waiting for the mutex
 	ifLater := time.Time{} // spoofed to avoid rewriting downloadFile
 	downloaded := false
-	for _, url := range getCurrentURLs(repo) {
+	for _, url := range repo.getUrls() {
 		downloaded, err = downloadFile(url+path+"/"+fileName, filePath, ifLater)
 		if err == nil {
 			if config.Prefetch != nil && !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
@@ -291,7 +291,7 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 			ifLater = stat.ModTime()
 		}
 
-		for _, url := range getCurrentURLs(repo) {
+		for _, url := range repo.getUrls() {
 			served, err = downloadFileAndSend(url+path+"/"+fileName, filePath, ifLater, w)
 			if err == nil {
 				if config.Prefetch != nil && !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {

@@ -53,7 +53,7 @@ func TestParseMirrorlist(t *testing.T) {
 		t.Error(err)
 	}
 
-	actualURLs, err := parseMirrorlistURLs("", f)
+	actualURLs, err := parseMirrorlistURLs(f)
 	if err != nil {
 		t.Error(err)
 	}
@@ -89,7 +89,7 @@ repos:
 
 `))
 	archTest := config.Repos["archTest"]
-	urls := getCurrentURLs(archTest)
+	urls := archTest.getUrls()
 
 	if !cmp.Equal(urls, expectedURLs) {
 		t.Errorf("Got %v, expected %v", urls, expectedURLs)

@@ -21,7 +21,6 @@ var (
 // sets up the urls channel so the tests can use it.
 func makeTestRepo() *Repo {
 	repo := &Repo{}
-	initURLsChannel("", repo)
 	return repo
 }
 

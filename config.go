@@ -24,7 +24,6 @@ type Repo struct {
 	Mirrorlist           string    `yaml:"mirrorlist"`
 	LastMirrorlistCheck  time.Time `yaml:"-"`
 	LastModificationTime time.Time `yaml:"-"`
-	urlsChan             chan chan []string
 }
 
 type RefreshPeriod struct {
@@ -46,16 +45,6 @@ type Config struct {
 }
 
 var config *Config
-
-func initURLsChannel(name string, repo *Repo) {
-	in := make(chan chan []string)
-	go func() {
-		for out := range in {
-			out <- getRepoURLs(name, repo)
-		}
-	}()
-	repo.urlsChan = in
-}
 
 func parseConfig(raw []byte) *Config {
 	result := Config{
@@ -90,7 +79,6 @@ func parseConfig(raw []byte) *Config {
 			}
 			log.Fatalf("mirrorlist file %v for repo %v does not exist or isn't readable for user %v", repo.Mirrorlist, name, u.Username)
 		}
-		initURLsChannel(name, repo)
 	}
 
 	if result.PurgeFilesAfter < 10*60 && result.PurgeFilesAfter != 0 {

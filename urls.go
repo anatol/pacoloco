@@ -8,27 +8,21 @@ import (
 	"time"
 )
 
-func getCurrentURLs(r *Repo) []string {
-	c := make(chan []string)
-	r.urlsChan <- c
-	return <-c
-}
-
-func getRepoURLs(repoName string, repo *Repo) []string {
-	if repo.Mirrorlist != "" {
-		urls, err := getMirrorlistURLs(repoName, repo)
+func (r *Repo) getUrls() []string {
+	if r.Mirrorlist != "" {
+		urls, err := r.getMirrorlistURLs()
 		if err != nil {
-			log.Printf("error getting urls from mirrorlist for repo %v: %v", repoName, err.Error())
+			log.Printf("error getting urls from mirrorlist: %v", err.Error())
 		}
 		return urls
-	} else if repo.URL != "" {
-		return []string{repo.URL}
+	} else if r.URL != "" {
+		return []string{r.URL}
 	} else {
-		return repo.URLs
+		return r.URLs
 	}
 }
 
-func parseMirrorlistURLs(repoName string, file *os.File) ([]string, error) {
+func parseMirrorlistURLs(file *os.File) ([]string, error) {
 	var urls []string
 	scanner := bufio.NewScanner(file)
 	// resize scanner's capacity if lines are longer than 64K.
@@ -40,7 +34,7 @@ func parseMirrorlistURLs(repoName string, file *os.File) ([]string, error) {
 				urls = append(urls, url)
 			} else {
 				// this can be a regex error or otherwise a very peculiar url
-				log.Printf("warning: %v url in repo %v contains suspicious characters, skipping it", url, repoName)
+				log.Printf("warning: %v url in mirror file %v contains suspicious characters, skipping it", url, file.Name())
 			}
 		}
 	}
@@ -48,33 +42,33 @@ func parseMirrorlistURLs(repoName string, file *os.File) ([]string, error) {
 	return urls, scanner.Err()
 }
 
-func getMirrorlistURLs(repoName string, repo *Repo) ([]string, error) {
-	if time.Since(repo.LastMirrorlistCheck) < 5*time.Second {
-		return repo.URLs, nil
+func (r *Repo) getMirrorlistURLs() ([]string, error) {
+	if time.Since(r.LastMirrorlistCheck) < 5*time.Second {
+		return r.URLs, nil
 	}
 
-	repo.LastMirrorlistCheck = time.Now()
+	r.LastMirrorlistCheck = time.Now()
 
-	fileInfo, err := os.Stat(repo.Mirrorlist)
+	fileInfo, err := os.Stat(r.Mirrorlist)
 	if err != nil {
 		return nil, err
 	}
 
 	fileModTime := fileInfo.ModTime()
-	if fileModTime == repo.LastModificationTime {
-		return repo.URLs, nil
+	if fileModTime == r.LastModificationTime {
+		return r.URLs, nil
 	}
 
-	repo.LastModificationTime = fileModTime
+	r.LastModificationTime = fileModTime
 
-	file, err := os.Open(repo.Mirrorlist)
+	file, err := os.Open(r.Mirrorlist)
 	if err != nil {
 		return nil, err
 	}
 
-	urls, err := parseMirrorlistURLs(repoName, file)
+	urls, err := parseMirrorlistURLs(file)
 	if err == nil {
-		repo.URLs = urls
+		r.URLs = urls
 	}
 	return urls, err
 }
