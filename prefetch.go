@@ -181,7 +181,7 @@ func purgePkgIfExists(pkgToDel *Package) {
 func cleanPrefetchDB() {
 	log.Printf("Cleaning the db...\n")
 	if config.Prefetch != nil {
-		period := time.Duration(24 * int64(time.Hour) * int64(config.Prefetch.TTLUnaccessed))
+		period := 24 * time.Hour * time.Duration(config.Prefetch.TTLUnaccessed)
 		olderThan := time.Now().Add(-period)
 		deadPkgs := getAndDropUnusedPackages(period)
 		dropUnusedDBFiles(olderThan) // drop too old db links
@@ -189,7 +189,7 @@ func cleanPrefetchDB() {
 		for _, pkgToDel := range deadPkgs {
 			purgePkgIfExists(&pkgToDel)
 		}
-		period = time.Duration(24 * int64(time.Hour) * int64(config.Prefetch.TTLUnupdated))
+		period = 24 * time.Hour * time.Duration(config.Prefetch.TTLUnupdated)
 		olderThan = time.Now().Add(-period)
 		deadPkgs = getAndDropDeadPackages(olderThan)
 		// deletes dead packages
