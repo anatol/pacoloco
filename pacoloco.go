@@ -26,7 +26,6 @@ var (
 	filenameDBRegex *regexp.Regexp // to get the filename from the db file
 	mirrorlistRegex *regexp.Regexp // to extract the url from a mirrorlist file
 	prefetchDB      *gorm.DB
-	userAgent       string
 )
 
 // Accepted formats
@@ -125,9 +124,8 @@ func main() {
 		http.DefaultTransport = &http.Transport{Proxy: http.ProxyURL(proxyUrl)}
 	}
 
-	userAgent = "Pacoloco/1.2"
-	if config.UserAgent != "" {
-		userAgent = config.UserAgent
+	if config.UserAgent == "" {
+		config.UserAgent = "Pacoloco/1.2"
 	}
 
 	listenAddr := fmt.Sprintf(":%d", config.Port)
@@ -337,7 +335,7 @@ func downloadFile(url string, filePath string, ifModifiedSince time.Time) (serve
 	// some servers return compressed data without Content-Length header info
 	// disable compression as it useless for package data
 	req.Header.Add("Accept-Encoding", "identity")
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", config.UserAgent)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -408,7 +406,7 @@ func downloadFileAndSend(url string, filePath string, ifModifiedSince time.Time,
 	// some servers return compressed data without Content-Length header info
 	// disable compression as it useless for package data
 	req.Header.Add("Accept-Encoding", "identity")
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", config.UserAgent)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
