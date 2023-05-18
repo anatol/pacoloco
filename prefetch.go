@@ -164,7 +164,7 @@ func updateDBPrefetchedFile(repoName string, fileName string) {
 // purges all possible package files
 func purgePkgIfExists(pkgToDel *Package) {
 	if pkgToDel != nil {
-		basePathsToDelete := getAllPackagePaths(*pkgToDel)
+		basePathsToDelete := pkgToDel.getAllPaths()
 		for _, p := range basePathsToDelete {
 			pathToDelete := path.Join(config.CacheDir, p)
 			if _, err := os.Stat(pathToDelete); !os.IsNotExist(err) {
@@ -230,7 +230,7 @@ func prefetchAllPkgs() {
 	}
 	for _, p := range pkgs {
 		pkg := getPackage(p.PackageName, p.Arch, p.RepoName)
-		urls := getPkgToUpdateDownloadURLs(p)
+		urls := p.getDownloadURLs()
 		var failed []string
 		for _, url := range urls {
 			if err := prefetchRequest(url, ""); err == nil {

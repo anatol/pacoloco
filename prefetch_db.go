@@ -25,7 +25,7 @@ type Package struct {
 }
 
 // there are many possible paths for a package, this function returns ALL the possible ones
-func getAllPackagePaths(pkg Package) []string {
+func (pkg Package) getAllPaths() []string {
 	baseString := path.Join("pkgs", pkg.RepoName, pkg.PackageName+"-"+pkg.Version+"-"+pkg.Arch)
 	var pkgPaths []string
 	for _, ext := range allowedPackagesExtensions {
@@ -187,7 +187,7 @@ type PkgToUpdate struct {
 	FileExt     string
 }
 
-func getPkgToUpdateDownloadURLs(p PkgToUpdate) []string {
+func (p PkgToUpdate) getDownloadURLs() []string {
 	baseString := p.DownloadURL
 	var urls []string
 	for _, ext := range allowedPackagesExtensions {
