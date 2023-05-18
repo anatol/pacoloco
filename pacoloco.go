@@ -304,8 +304,10 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 		}
 	}
 	if !served {
-		err = sendCachedFile(w, req, fileName, filePath)
-		if err == nil && config.Prefetch != nil && !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
+		log.Printf("serving cached file %v", filePath)
+		http.ServeFile(w, req, filePath)
+
+		if config.Prefetch != nil && !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
 			updateDBRequestedFile(repoName, fileName) // update info for prefetching
 		}
 	}
@@ -459,20 +461,4 @@ func downloadFileAndSend(url string, filePath string, ifModifiedSince time.Time,
 	}
 
 	return
-}
-
-func sendCachedFile(w http.ResponseWriter, req *http.Request, fileName string, filePath string) error {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	stat, err := file.Stat()
-	if err != nil {
-		return err
-	}
-	log.Printf("serving cached file %v", filePath)
-	http.ServeContent(w, req, fileName, stat.ModTime(), file)
-	return nil
 }
