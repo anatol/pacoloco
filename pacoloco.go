@@ -292,11 +292,6 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 		for _, url := range repo.getUrls() {
 			served, err = downloadFileAndSend(url+path+"/"+fileName, filePath, ifLater, w)
 			if err == nil {
-				if config.Prefetch != nil && !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
-					updateDBRequestedFile(repoName, fileName) // update info for prefetching
-				} else if err == nil && config.Prefetch != nil && strings.HasSuffix(fileName, ".db") {
-					updateDBRequestedDB(repoName, path, fileName)
-				}
 				break
 			}
 		}
@@ -304,9 +299,13 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 	if !served {
 		log.Printf("serving cached file %v", filePath)
 		http.ServeFile(w, req, filePath)
+	}
 
-		if config.Prefetch != nil && !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
+	if config.Prefetch != nil && (err == nil || !served) {
+		if !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
 			updateDBRequestedFile(repoName, fileName) // update info for prefetching
+		} else if strings.HasSuffix(fileName, ".db") {
+			updateDBRequestedDB(repoName, path, fileName)
 		}
 	}
 	return err
