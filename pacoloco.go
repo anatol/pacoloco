@@ -212,21 +212,22 @@ func prefetchRequest(url string, optionalCustomPath string) (err error) {
 	downloaded := false
 	for _, url := range repo.getUrls() {
 		downloaded, err = downloadFile(url+path+"/"+fileName, filePath, ifLater)
-		if err == nil {
-			if config.Prefetch != nil && !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
-				updateDBPrefetchedFile(repoName, fileName) // update info for prefetching
-			}
+		if downloaded {
 			break
 		}
 	}
 
-	if err != nil {
-		return err
-	} else if !downloaded {
-		return fmt.Errorf("not downloaded")
-	} else {
-		return nil
+	if downloaded && config.Prefetch != nil {
+		if !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
+			updateDBPrefetchedFile(repoName, fileName) // update info for prefetching
+		}
 	}
+
+	if err == nil && !downloaded {
+		err = fmt.Errorf("not downloaded")
+	}
+
+	return err
 }
 
 func handleRequest(w http.ResponseWriter, req *http.Request) error {
