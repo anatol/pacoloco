@@ -211,7 +211,7 @@ func prefetchRequest(url string, optionalCustomPath string) (err error) {
 	ifLater := time.Time{} // spoofed to avoid rewriting downloadFile
 	downloaded := false
 	for _, url := range repo.getUrls() {
-		downloaded, err = downloadFile(url+path+"/"+fileName, filePath, ifLater)
+		downloaded, err = downloadFile(url+path+"/"+fileName, filePath, ifLater, nil)
 		if downloaded {
 			break
 		}
@@ -291,7 +291,7 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 		}
 
 		for _, url := range repo.getUrls() {
-			served, err = downloadFileAndSend(url+path+"/"+fileName, filePath, ifLater, w)
+			served, err = downloadFile(url+path+"/"+fileName, filePath, ifLater, w)
 			if err == nil {
 				break
 			}
@@ -312,81 +312,10 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 	return err
 }
 
-// downloadFile downloads file from `url`, saves it to the given `localFileName`
-// file.
-// The function returns whether the function saved the downloaded data and error if one occurred
-func downloadFile(url string, filePath string, ifModifiedSince time.Time) (served bool, err error) {
-	var req *http.Request
-	if config.DownloadTimeout > 0 {
-		ctx, ctxCancel := context.WithTimeout(context.Background(), time.Duration(config.DownloadTimeout)*time.Second)
-		defer ctxCancel()
-		req, err = http.NewRequestWithContext(ctx, "GET", url, nil)
-	} else {
-		req, err = http.NewRequest("GET", url, nil)
-	}
-	if err != nil {
-		return false, err
-	}
-
-	if !ifModifiedSince.IsZero() {
-		req.Header.Set("If-Modified-Since", ifModifiedSince.UTC().Format(http.TimeFormat))
-	}
-	// golang requests compression for all requests except HEAD
-	// some servers return compressed data without Content-Length header info
-	// disable compression as it useless for package data
-	req.Header.Add("Accept-Encoding", "identity")
-	req.Header.Set("User-Agent", config.UserAgent)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return false, err
-	}
-	defer resp.Body.Close()
-
-	switch resp.StatusCode {
-	case http.StatusOK:
-		break
-	case http.StatusNotModified:
-		// either pacoloco or client has the latest version, no need to redownload it
-		return false, nil
-	default:
-		// for most dbs signatures are optional, be quiet if the signature is not found
-		// quiet := resp.StatusCode == http.StatusNotFound && strings.HasSuffix(url, ".db.sig")
-		err = fmt.Errorf("unable to download url %s, status code is %d", url, resp.StatusCode)
-		return false, err
-	}
-
-	file, err := os.Create(filePath)
-	if err != nil {
-		return
-	}
-	w := io.Writer(file)
-	log.Printf("downloading %v", url)
-	_, err = io.Copy(w, resp.Body)
-	_ = file.Close() // Close the file early to make sure the file modification time is set
-	if err != nil {
-		// remove the cached file if download was not successful
-		log.Print(err)
-		_ = os.Remove(filePath)
-		return
-	}
-	served = true
-
-	if lastModified := resp.Header.Get("Last-Modified"); lastModified != "" {
-		lastModified, parseErr := http.ParseTime(lastModified)
-		if err = parseErr; err == nil {
-			if err = os.Chtimes(filePath, time.Now(), lastModified); err != nil {
-				return true, nil
-			}
-		}
-	}
-	return served, nil
-}
-
 // downloadFileAndSend downloads file from `url`, saves it to the given `localFileName`
 // file and sends to `clientWriter` at the same time.
 // The function returns whether the function sent the data to client and error if one occurred
-func downloadFileAndSend(url string, filePath string, ifModifiedSince time.Time, clientWriter http.ResponseWriter) (served bool, err error) {
+func downloadFile(url string, filePath string, ifModifiedSince time.Time, clientWriter http.ResponseWriter) (served bool, err error) {
 	var req *http.Request
 	if config.DownloadTimeout > 0 {
 		ctx, ctxCancel := context.WithTimeout(context.Background(), time.Duration(config.DownloadTimeout)*time.Second)
@@ -431,13 +360,17 @@ func downloadFileAndSend(url string, filePath string, ifModifiedSince time.Time,
 	if err != nil {
 		return
 	}
+	var w io.Writer
+	w = file
 
 	log.Printf("downloading %v", url)
-	clientWriter.Header().Set("Content-Length", resp.Header.Get("Content-Length"))
-	clientWriter.Header().Set("Content-Type", "application/octet-stream")
-	clientWriter.Header().Set("Last-Modified", resp.Header.Get("Last-Modified"))
+	if clientWriter != nil {
+		clientWriter.Header().Set("Content-Length", resp.Header.Get("Content-Length"))
+		clientWriter.Header().Set("Content-Type", "application/octet-stream")
+		clientWriter.Header().Set("Last-Modified", resp.Header.Get("Last-Modified"))
+		w = io.MultiWriter(w, clientWriter)
+	}
 
-	w := io.MultiWriter(file, clientWriter)
 	_, err = io.Copy(w, resp.Body)
 	_ = file.Close() // Close the file early to make sure the file modification time is set
 	if err != nil {
