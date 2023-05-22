@@ -280,7 +280,7 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 		requestFromServer = noFile || forceCheckAtServer(fileName)
 	}
 
-	var served bool
+	var downloaded bool
 	if requestFromServer {
 		ifLater, _ := http.ParseTime(req.Header.Get("If-Modified-Since"))
 		if noFile {
@@ -291,18 +291,18 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 		}
 
 		for _, url := range repo.getUrls() {
-			served, err = downloadFile(url+path+"/"+fileName, filePath, ifLater, w)
+			downloaded, err = downloadFile(url+path+"/"+fileName, filePath, ifLater, w)
 			if err == nil {
 				break
 			}
 		}
 	}
-	if !served {
+	if !downloaded {
 		log.Printf("serving cached file %v", filePath)
 		http.ServeFile(w, req, filePath)
 	}
 
-	if config.Prefetch != nil && (err == nil || !served) {
+	if downloaded && config.Prefetch != nil {
 		if !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
 			updateDBRequestedFile(repoName, fileName) // update info for prefetching
 		} else if strings.HasSuffix(fileName, ".db") {
@@ -315,7 +315,7 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 // downloadFileAndSend downloads file from `url`, saves it to the given `localFileName`
 // file and sends to `clientWriter` at the same time.
 // The function returns whether the function sent the data to client and error if one occurred
-func downloadFile(url string, filePath string, ifModifiedSince time.Time, clientWriter http.ResponseWriter) (served bool, err error) {
+func downloadFile(url string, filePath string, ifModifiedSince time.Time, clientWriter http.ResponseWriter) (downloaded bool, err error) {
 	var req *http.Request
 	if config.DownloadTimeout > 0 {
 		ctx, ctxCancel := context.WithTimeout(context.Background(), time.Duration(config.DownloadTimeout)*time.Second)
@@ -379,7 +379,7 @@ func downloadFile(url string, filePath string, ifModifiedSince time.Time, client
 		_ = os.Remove(filePath)
 		return
 	}
-	served = true
+	downloaded = true
 
 	if lastModified := resp.Header.Get("Last-Modified"); lastModified != "" {
 		lastModified, parseErr := http.ParseTime(lastModified)
