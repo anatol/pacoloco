@@ -15,6 +15,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gorm.io/gorm"
 )
 
@@ -132,7 +135,8 @@ func main() {
 	log.Println("Starting server at port", config.Port)
 	// The request path looks like '/repo/$reponame/$pathatmirror'
 	http.HandleFunc("/repo/", pacolocoHandler)
-	// http.HandleFunc("/stats", statsHandler) TODO: implement stats
+	// Expose prometheus metrics
+	http.Handle("/metrics", promhttp.Handler())
 	log.Fatal(http.ListenAndServe(listenAddr, nil))
 }
 
@@ -154,6 +158,17 @@ func forceCheckAtServer(fileName string) bool {
 	}
 	return false
 }
+
+var (
+	served_cache = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "pacoloco_cache_hits_total",
+		Help: "The total number of cache matches",
+	})
+	downloaded_files = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "pacoloco_downloaded_files_total",
+		Help: "The total number of downloaded files",
+	})
+)
 
 // A mutex map for files currently being downloaded
 // It is used to prevent downloading the same file with concurrent requests
@@ -295,10 +310,12 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 			if err == nil {
 				break
 			}
+			downloaded_files.Inc()
 		}
 	}
 	if !downloaded {
 		log.Printf("serving cached file %v", filePath)
+		served_cache.Inc()
 		http.ServeFile(w, req, filePath)
 	}
 
