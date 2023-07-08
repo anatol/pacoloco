@@ -131,10 +131,6 @@ func main() {
 		config.UserAgent = "Pacoloco/1.2"
 	}
 
-	for repoName, repo := range config.Repos {
-		configuredMirrors.WithLabelValues(repoName).Set(float64(len(repo.URLs)))
-	}
-
 	listenAddr := fmt.Sprintf(":%d", config.Port)
 	log.Println("Starting server at port", config.Port)
 	// The request path looks like '/repo/$reponame/$pathatmirror'
@@ -168,18 +164,18 @@ var (
 		Name: "pacoloco_cache_hits_total",
 		Help: "The total number of cache matches",
 	}, []string{"repo"})
-	configuredMirrors = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "pacoloco_configured_mirrors_count",
-		Help: "Number of configured mirrors",
+	failedToServeFromCache = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "pacoloco_configured_errors_total",
+		Help: "Number of errors in cache",
 	}, []string{"repo"})
 	downloadedFiles = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "pacoloco_downloaded_files_total",
 		Help: "Total number of downloaded files",
-	}, []string{"repo"})
+	}, []string{"repo", "upsteam"})
 	abortedDownloads = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "pacoloco_aborted_downloads_total",
 		Help: "Total number of aborted downloads",
-	}, []string{"repo"})
+	}, []string{"repo", "upsteam"})
 )
 
 // A mutex map for files currently being downloaded
@@ -270,6 +266,7 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 	if !ok {
 		return fmt.Errorf("cannot find repo %s in the config file", repoName)
 	}
+
 	// create cache directory if needed
 	cachePath := filepath.Join(config.CacheDir, "pkgs", repoName)
 	if _, err := os.Stat(cachePath); os.IsNotExist(err) {
@@ -316,22 +313,28 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 			ifLater = stat.ModTime()
 		}
 
-		for _, url := range repo.getUrls() {
-			downloaded, err = downloadFile(url+path+"/"+fileName, filePath, ifLater, w)
+		for _, upsteam_url := range repo.getUrls() {
+			upsteam_url, err := url.Parse(upsteam_url)
+			downloaded, err = downloadFile(upsteam_url.JoinPath(path+"/"+fileName).String(), filePath, ifLater, w)
 			if err == nil {
 				if downloaded {
-					downloadedFiles.WithLabelValues(repoName).Inc()
+					downloadedFiles.WithLabelValues(repoName, upsteam_url.Host).Inc()
 				}
 				break
 			}
-			abortedDownloads.WithLabelValues(repoName).Inc()
+			abortedDownloads.WithLabelValues(repoName, upsteam_url.Host).Inc()
 		}
 	}
 
-	if !downloaded && err == nil {
-		log.Printf("serving cached file %v", filePath)
-		servedFromCache.WithLabelValues(repoName).Inc()
-		http.ServeFile(w, req, filePath)
+	if !downloaded {
+		if _, pathErr := os.Stat(filePath); pathErr == nil {
+			log.Printf("serving cached file %v", filePath)
+			servedFromCache.WithLabelValues(repoName).Inc()
+			http.ServeFile(w, req, filePath)
+		} else if os.IsNotExist(pathErr) {
+			log.Printf("attempted to serve file %v but no file was found", filePath)
+			failedToServeFromCache.WithLabelValues(repoName).Inc()
+		}
 	}
 
 	if downloaded && config.Prefetch != nil {
