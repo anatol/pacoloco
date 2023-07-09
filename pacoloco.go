@@ -330,11 +330,11 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 		if _, pathErr := os.Stat(filePath); pathErr == nil {
 			log.Printf("serving cached file %v", filePath)
 			servedFromCache.WithLabelValues(repoName).Inc()
-			http.ServeFile(w, req, filePath)
 		} else if os.IsNotExist(pathErr) {
 			log.Printf("attempted to serve file %v but no file was found", filePath)
 			failedToServeFromCache.WithLabelValues(repoName).Inc()
 		}
+		http.ServeFile(w, req, filePath)
 	}
 
 	if downloaded && config.Prefetch != nil {
