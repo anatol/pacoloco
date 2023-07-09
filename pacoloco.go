@@ -221,8 +221,8 @@ var (
 )
 
 // force resources prefetching
-func prefetchRequest(urlPath string, optionalCustomPath string) (err error) {
-	//	urlPath := url
+func prefetchRequest(url string, optionalCustomPath string) (err error) {
+	urlPath := url
 	matches := pathRegex.FindStringSubmatch(urlPath)
 	if len(matches) == 0 {
 		return fmt.Errorf("input url path '%v' does not match expected format", urlPath)
@@ -277,7 +277,7 @@ func prefetchRequest(urlPath string, optionalCustomPath string) (err error) {
 
 	if downloaded && config.Prefetch != nil {
 		if !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
-			updateDBPrefetchedFile(repoName, fileName) // update info for prefetching/
+			updateDBPrefetchedFile(repoName, fileName) // update info for prefetching
 		}
 	}
 
