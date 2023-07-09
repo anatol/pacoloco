@@ -117,11 +117,12 @@ func main() {
 
 	for repoName := range config.Repos {
 		cachePath := filepath.Join(config.CacheDir, "pkgs", repoName)
-		size, err := gatherCacheSize(cachePath)
+		size, numberOfPackages, err := gatherCacheSizeAndNumOfPackages(cachePath)
 		if err != nil {
 			log.Println("Gathering size failed for ", repoName)
 		}
 		cacheSizeGauge.WithLabelValues(repoName).Set(size)
+		cachePackageGauge.WithLabelValues(repoName).Set(numberOfPackages)
 	}
 
 	if config.PurgeFilesAfter != 0 {
@@ -150,18 +151,20 @@ func main() {
 	log.Fatal(http.ListenAndServe(listenAddr, nil))
 }
 
-func gatherCacheSize(repoDir string) (float64, error) {
+func gatherCacheSizeAndNumOfPackages(repoDir string) (float64, float64, error) {
 	var size int64
+	var numberOfPackages int64
 	err := filepath.Walk(repoDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 		if !info.IsDir() {
 			size += info.Size()
+			numberOfPackages++
 		}
 		return err
 	})
-	return float64(size), err
+	return float64(size), float64(numberOfPackages), err
 }
 
 func pacolocoHandler(w http.ResponseWriter, req *http.Request) {
@@ -204,6 +207,10 @@ var (
 	cacheSizeGauge = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "pacoloco_cache_size_bytes",
 		Help: "Number of bytes taken by the cache",
+	}, []string{"repo"})
+	cachePackageGauge = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "pacoloco_cache_packages_total",
+		Help: "Number of packages in the cache",
 	}, []string{"repo"})
 
 	// Track individual mirror behavior
@@ -273,6 +280,12 @@ func prefetchRequest(url string, optionalCustomPath string) (err error) {
 		if downloaded {
 			break
 		}
+	}
+	if downloaded {
+		cacheMissedCounter.WithLabelValues(repoName).Inc()
+		info, _ := os.Stat(filePath)
+		cacheSizeGauge.WithLabelValues(repoName).Add(float64(info.Size()))
+		cachePackageGauge.WithLabelValues(repoName).Inc()
 	}
 
 	if downloaded && config.Prefetch != nil {
@@ -369,6 +382,7 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 		cacheMissedCounter.WithLabelValues(repoName).Inc()
 		info, _ := os.Stat(filePath)
 		cacheSizeGauge.WithLabelValues(repoName).Add(float64(info.Size()))
+		cachePackageGauge.WithLabelValues(repoName).Inc()
 	}
 
 	if downloaded && config.Prefetch != nil {

@@ -391,6 +391,10 @@ func testRequestPackageFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	info, err := os.Stat(pkgAtMirror)
+	if err != nil {
+		t.Error(err)
+	}
 	requestCounter, err := cacheRequestsCounter.GetMetricWithLabelValues("repo3")
 	if err != nil {
 		t.Error(err)
@@ -407,11 +411,21 @@ func testRequestPackageFile(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	cachePackageCounter, err := cachePackageGauge.GetMetricWithLabelValues("repo3")
+	if err != nil {
+		t.Error(err)
+	}
+	cachePackageSize, err := cacheSizeGauge.GetMetricWithLabelValues("repo3")
+	if err != nil {
+		t.Error(err)
+	}
 
 	expectedRequests := testutil.ToFloat64(requestCounter) + 1
 	expectedServed := testutil.ToFloat64(servedCounter)
 	expectedMissed := testutil.ToFloat64(missedCounter) + 1
 	expectedErrorServed := testutil.ToFloat64(cacheErrorCounter)
+	expectedPackageNum := testutil.ToFloat64(cachePackageCounter) + 1
+	expectedSize := testutil.ToFloat64(cachePackageSize) + float64(info.Size())
 
 	req := httptest.NewRequest("GET", pacolocoURL+"/repo/repo3/test-1-any.pkg.tar.zst", nil)
 	w := httptest.NewRecorder()
@@ -444,6 +458,8 @@ func testRequestPackageFile(t *testing.T) {
 	actualServed := testutil.ToFloat64(servedCounter)
 	actualMissed := testutil.ToFloat64(missedCounter)
 	actualErrorServed := testutil.ToFloat64(cacheErrorCounter)
+	actualPackageNum := testutil.ToFloat64(cachePackageCounter)
+	actualSize := testutil.ToFloat64(cachePackageSize)
 
 	if expectedRequests != actualRequests {
 		t.Errorf("Request metric check failed: expected %v, got %v", expectedRequests, actualRequests)
@@ -456,6 +472,12 @@ func testRequestPackageFile(t *testing.T) {
 	}
 	if expectedErrorServed != actualErrorServed {
 		t.Errorf("Cache error metric check failed: expected %v, got %v", expectedErrorServed, actualErrorServed)
+	}
+	if expectedPackageNum != actualPackageNum {
+		t.Errorf("Cache package number metric check failed: expected %v, got %v", expectedErrorServed, actualPackageNum)
+	}
+	if expectedSize != actualSize {
+		t.Errorf("Cache size metric check failed: expected %v, got %v", expectedSize, actualSize)
 	}
 
 	// check that pkg is cached
