@@ -474,7 +474,7 @@ func testRequestPackageFile(t *testing.T) {
 		t.Errorf("Cache error metric check failed: expected %v, got %v", expectedErrorServed, actualErrorServed)
 	}
 	if expectedPackageNum != actualPackageNum {
-		t.Errorf("Cache package number metric check failed: expected %v, got %v", expectedErrorServed, actualPackageNum)
+		t.Errorf("Cache package number metric check failed: expected %v, got %v", expectedPackageNum, actualPackageNum)
 	}
 	if expectedSize != actualSize {
 		t.Errorf("Cache size metric check failed: expected %v, got %v", expectedSize, actualSize)
