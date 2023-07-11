@@ -11,10 +11,14 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gorm.io/gorm"
 )
 
@@ -111,6 +115,16 @@ func main() {
 		setupPrefetch() // enable refresh
 	}
 
+	for repoName := range config.Repos {
+		cachePath := filepath.Join(config.CacheDir, "pkgs", repoName)
+		totalCacheSize, totalPackageCount, err := gatherCacheStats(cachePath)
+		if err != nil {
+			log.Println("Gathering size failed for ", repoName)
+		}
+		cacheSizeGauge.WithLabelValues(repoName).Set(totalCacheSize)
+		cachePackageGauge.WithLabelValues(repoName).Set(totalPackageCount)
+	}
+
 	if config.PurgeFilesAfter != 0 {
 		cleanupTicker := setupPurgeStaleFilesRoutine()
 		defer cleanupTicker.Stop()
@@ -132,8 +146,26 @@ func main() {
 	log.Println("Starting server at port", config.Port)
 	// The request path looks like '/repo/$reponame/$pathatmirror'
 	http.HandleFunc("/repo/", pacolocoHandler)
-	// http.HandleFunc("/stats", statsHandler) TODO: implement stats
+	// Expose prometheus metrics
+	http.Handle("/metrics", promhttp.Handler())
 	log.Fatal(http.ListenAndServe(listenAddr, nil))
+}
+
+// walks through given directory and gathers its stats. Returns cache size in bytes and package count
+func gatherCacheStats(repoDir string) (totalCacheSize float64, totalPackageCount float64, err error) {
+	var size int64
+	var numberOfPackages int64
+	err = filepath.Walk(repoDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			size += info.Size()
+			numberOfPackages++
+		}
+		return err
+	})
+	return float64(size), float64(numberOfPackages), err
 }
 
 func pacolocoHandler(w http.ResponseWriter, req *http.Request) {
@@ -154,6 +186,40 @@ func forceCheckAtServer(fileName string) bool {
 	}
 	return false
 }
+
+var (
+	cacheRequestsCounter = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "pacoloco_cache_requests_total",
+		Help: "Number of requests to cache",
+	}, []string{"repo"})
+	cacheServedCounter = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "pacoloco_cache_hits_total",
+		Help: "The total number of cache hits",
+	}, []string{"repo"})
+	cacheMissedCounter = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "pacoloco_cache_miss_total",
+		Help: "The total number of cache misses",
+	}, []string{"repo"})
+	cacheServingFailedCounter = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "pacoloco_cache_errors_total",
+		Help: "Number of errors while trying to serve cached file",
+	}, []string{"repo"})
+
+	cacheSizeGauge = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "pacoloco_cache_size_bytes",
+		Help: "Number of bytes taken by the cache",
+	}, []string{"repo"})
+	cachePackageGauge = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "pacoloco_cache_packages_total",
+		Help: "Number of packages in the cache",
+	}, []string{"repo"})
+
+	// Track individual mirror behavior
+	downloadedFilesCounter = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "pacoloco_downloaded_files_total",
+		Help: "Total number of downloaded files",
+	}, []string{"repo", "upstream", "status"})
+)
 
 // A mutex map for files currently being downloaded
 // It is used to prevent downloading the same file with concurrent requests
@@ -216,6 +282,12 @@ func prefetchRequest(url string, optionalCustomPath string) (err error) {
 			break
 		}
 	}
+	if downloaded {
+		cacheMissedCounter.WithLabelValues(repoName).Inc()
+		info, _ := os.Stat(filePath)
+		cacheSizeGauge.WithLabelValues(repoName).Add(float64(info.Size()))
+		cachePackageGauge.WithLabelValues(repoName).Inc()
+	}
 
 	if downloaded && config.Prefetch != nil {
 		if !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
@@ -243,7 +315,7 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 	if !ok {
 		return fmt.Errorf("cannot find repo %s in the config file", repoName)
 	}
-
+	cacheRequestsCounter.WithLabelValues(repoName).Inc()
 	// create cache directory if needed
 	cachePath := filepath.Join(config.CacheDir, "pkgs", repoName)
 	if _, err := os.Stat(cachePath); os.IsNotExist(err) {
@@ -297,9 +369,21 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 			}
 		}
 	}
+
 	if !downloaded {
 		log.Printf("serving cached file %v", filePath)
+		if _, pathErr := os.Stat(filePath); pathErr == nil {
+			cacheServedCounter.WithLabelValues(repoName).Inc()
+		} else if os.IsNotExist(pathErr) {
+			cacheServingFailedCounter.WithLabelValues(repoName).Inc()
+		}
 		http.ServeFile(w, req, filePath)
+	}
+	if downloaded {
+		cacheMissedCounter.WithLabelValues(repoName).Inc()
+		info, _ := os.Stat(filePath)
+		cacheSizeGauge.WithLabelValues(repoName).Add(float64(info.Size()))
+		cachePackageGauge.WithLabelValues(repoName).Inc()
 	}
 
 	if downloaded && config.Prefetch != nil {
@@ -315,14 +399,21 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 // downloadFileAndSend downloads file from `url`, saves it to the given `localFileName`
 // file and sends to `clientWriter` at the same time.
 // The function returns whether the function sent the data to client and error if one occurred
-func downloadFile(url string, filePath string, ifModifiedSince time.Time, clientWriter http.ResponseWriter) (downloaded bool, err error) {
+func downloadFile(upstreamUrl string, filePath string, ifModifiedSince time.Time, clientWriter http.ResponseWriter) (downloaded bool, err error) {
 	var req *http.Request
+
+	u, err := url.Parse(upstreamUrl)
+	if err != nil {
+		return
+	}
+
+	host := u.Host
 	if config.DownloadTimeout > 0 {
 		ctx, ctxCancel := context.WithTimeout(context.Background(), time.Duration(config.DownloadTimeout)*time.Second)
 		defer ctxCancel()
-		req, err = http.NewRequestWithContext(ctx, "GET", url, nil)
+		req, err = http.NewRequestWithContext(ctx, "GET", upstreamUrl, nil)
 	} else {
-		req, err = http.NewRequest("GET", url, nil)
+		req, err = http.NewRequest("GET", upstreamUrl, nil)
 	}
 	if err != nil {
 		return
@@ -343,6 +434,9 @@ func downloadFile(url string, filePath string, ifModifiedSince time.Time, client
 	}
 	defer resp.Body.Close()
 
+	repoName := filepath.Base(filepath.Dir(filePath))
+	downloadedFilesCounter.WithLabelValues(repoName, host, strconv.Itoa(resp.StatusCode)).Inc()
+
 	switch resp.StatusCode {
 	case http.StatusOK:
 		break
@@ -352,7 +446,7 @@ func downloadFile(url string, filePath string, ifModifiedSince time.Time, client
 	default:
 		// for most dbs signatures are optional, be quiet if the signature is not found
 		// quiet := resp.StatusCode == http.StatusNotFound && strings.HasSuffix(url, ".db.sig")
-		err = fmt.Errorf("unable to download url %s, status code is %d", url, resp.StatusCode)
+		err = fmt.Errorf("unable to download url %s, status code is %d", upstreamUrl, resp.StatusCode)
 		return
 	}
 
@@ -363,7 +457,7 @@ func downloadFile(url string, filePath string, ifModifiedSince time.Time, client
 	var w io.Writer
 	w = file
 
-	log.Printf("downloading %v", url)
+	log.Printf("downloading %v", upstreamUrl)
 	if clientWriter != nil {
 		clientWriter.Header().Set("Content-Length", resp.Header.Get("Content-Length"))
 		clientWriter.Header().Set("Content-Type", "application/octet-stream")

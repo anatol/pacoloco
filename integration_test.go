@@ -9,6 +9,8 @@ import (
 	"path"
 	"testing"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
 var (
@@ -140,12 +142,52 @@ func testRequestExistingRepo(t *testing.T) {
 	config.Repos["repo1"] = &Repo{}
 	defer delete(config.Repos, "repo1")
 
+	requestCounter, err := cacheRequestsCounter.GetMetricWithLabelValues("repo1")
+	if err != nil {
+		t.Error(err)
+	}
+	servedCounter, err := cacheServedCounter.GetMetricWithLabelValues("repo1")
+	if err != nil {
+		t.Error(err)
+	}
+	missedCounter, err := cacheMissedCounter.GetMetricWithLabelValues("repo1")
+	if err != nil {
+		t.Error(err)
+	}
+	cacheErrorCounter, err := cacheServingFailedCounter.GetMetricWithLabelValues("repo1")
+	if err != nil {
+		t.Error(err)
+	}
+
+	expectedRequests := testutil.ToFloat64(requestCounter) + 1
+	expectedServed := testutil.ToFloat64(servedCounter)
+	expectedMissed := testutil.ToFloat64(missedCounter)
+	expectedErrorServed := testutil.ToFloat64(cacheErrorCounter) + 1 // expected since we 404
+
 	req := httptest.NewRequest("GET", pacolocoURL+"/repo/repo1/test.db", nil)
 	w := httptest.NewRecorder()
 	pacolocoHandler(w, req)
 	resp := w.Result()
 	if resp.StatusCode != 404 {
 		t.Error("404 response expected")
+	}
+
+	actualRequests := testutil.ToFloat64(requestCounter)
+	actualServed := testutil.ToFloat64(servedCounter)
+	actualMissed := testutil.ToFloat64(missedCounter)
+	actualErrorServed := testutil.ToFloat64(cacheErrorCounter)
+
+	if expectedRequests != actualRequests {
+		t.Errorf("Request metric check failed: expected %v, got %v", expectedRequests, actualRequests)
+	}
+	if expectedServed != actualServed {
+		t.Errorf("Served from cache metric check failed: expected %v, got %v", expectedServed, actualServed)
+	}
+	if expectedServed != actualServed {
+		t.Errorf("Cache miss metric check failed: expected %v, got %v", expectedMissed, actualMissed)
+	}
+	if expectedErrorServed != actualErrorServed {
+		t.Errorf("Cache error metric check failed: expected %v, got %v", expectedErrorServed, actualErrorServed)
 	}
 
 	// check that db is not cached
@@ -179,6 +221,28 @@ func testRequestExistingRepoWithDb(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	requestCounter, err := cacheRequestsCounter.GetMetricWithLabelValues("repo2")
+	if err != nil {
+		t.Error(err)
+	}
+	servedCounter, err := cacheServedCounter.GetMetricWithLabelValues("repo2")
+	if err != nil {
+		t.Error(err)
+	}
+	missedCounter, err := cacheMissedCounter.GetMetricWithLabelValues("repo2")
+	if err != nil {
+		t.Error(err)
+	}
+	cacheErrorCounter, err := cacheServingFailedCounter.GetMetricWithLabelValues("repo2")
+	if err != nil {
+		t.Error(err)
+	}
+
+	expectedRequests := testutil.ToFloat64(requestCounter) + 1
+	expectedServed := testutil.ToFloat64(servedCounter)
+	expectedMissed := testutil.ToFloat64(missedCounter) + 1
+	expectedErrorServed := testutil.ToFloat64(cacheErrorCounter)
+
 	req := httptest.NewRequest("GET", pacolocoURL+"/repo/repo2/test.db", nil)
 	w := httptest.NewRecorder()
 	pacolocoHandler(w, req)
@@ -201,6 +265,24 @@ func testRequestExistingRepoWithDb(t *testing.T) {
 		t.Errorf("Incorrect Last-Modified received, expected: '%v' got: '%v'",
 			expectedModTime,
 			w.Header().Get("Last-Modified"))
+	}
+
+	actualRequests := testutil.ToFloat64(requestCounter)
+	actualServed := testutil.ToFloat64(servedCounter)
+	actualMissed := testutil.ToFloat64(missedCounter)
+	actualErrorServed := testutil.ToFloat64(cacheErrorCounter)
+
+	if expectedRequests != actualRequests {
+		t.Errorf("Request metric check failed: expected %v, got %v", expectedRequests, actualRequests)
+	}
+	if expectedServed != actualServed {
+		t.Errorf("Served from cache metric check failed: expected %v, got %v", expectedServed, actualServed)
+	}
+	if expectedMissed != actualMissed {
+		t.Errorf("cache miss metric check failed: expected %v, got %v", expectedMissed, actualMissed)
+	}
+	if expectedErrorServed != actualErrorServed {
+		t.Errorf("Cache error metric check failed: expected %v, got %v", expectedErrorServed, actualErrorServed)
 	}
 
 	// check that repo is cached
@@ -226,6 +308,11 @@ func testRequestExistingRepoWithDb(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	expectedRequests = testutil.ToFloat64(requestCounter) + 1
+	expectedServed = testutil.ToFloat64(servedCounter)
+	expectedMissed = testutil.ToFloat64(missedCounter) + 1
+	expectedErrorServed = testutil.ToFloat64(cacheErrorCounter)
+
 	req = httptest.NewRequest("GET", pacolocoURL+"/repo/repo2/test.db", nil)
 	w = httptest.NewRecorder()
 	pacolocoHandler(w, req)
@@ -241,6 +328,23 @@ func testRequestExistingRepoWithDb(t *testing.T) {
 		t.Errorf("Pacoloco cached incorrect db content: %v", string(content))
 	}
 
+	actualRequests = testutil.ToFloat64(requestCounter)
+	actualServed = testutil.ToFloat64(servedCounter)
+	actualMissed = testutil.ToFloat64(missedCounter)
+	actualErrorServed = testutil.ToFloat64(cacheErrorCounter)
+
+	if expectedRequests != actualRequests {
+		t.Errorf("Request metric check failed: expected %v, got %v", expectedRequests, actualRequests)
+	}
+	if expectedServed != actualServed {
+		t.Errorf("Served from cache metric check failed: expected %v, got %v", expectedServed, actualServed)
+	}
+	if expectedMissed != actualMissed {
+		t.Errorf("cache miss metric check failed: expected %v, got %v", expectedMissed, actualMissed)
+	}
+	if expectedErrorServed != actualErrorServed {
+		t.Errorf("Cache error metric check failed: expected %v, got %v", expectedErrorServed, actualErrorServed)
+	}
 	// check that repo is cached
 	if _, err := os.Stat(path.Join(testPacolocoDir, "pkgs", "repo2")); os.IsNotExist(err) {
 		t.Error("repo2 repo should be cached")
@@ -287,6 +391,42 @@ func testRequestPackageFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	info, err := os.Stat(pkgAtMirror)
+	if err != nil {
+		t.Error(err)
+	}
+	requestCounter, err := cacheRequestsCounter.GetMetricWithLabelValues("repo3")
+	if err != nil {
+		t.Error(err)
+	}
+	servedCounter, err := cacheServedCounter.GetMetricWithLabelValues("repo3")
+	if err != nil {
+		t.Error(err)
+	}
+	missedCounter, err := cacheMissedCounter.GetMetricWithLabelValues("repo3")
+	if err != nil {
+		t.Error(err)
+	}
+	cacheErrorCounter, err := cacheServingFailedCounter.GetMetricWithLabelValues("repo3")
+	if err != nil {
+		t.Error(err)
+	}
+	cachePackageCounter, err := cachePackageGauge.GetMetricWithLabelValues("repo3")
+	if err != nil {
+		t.Error(err)
+	}
+	cachePackageSize, err := cacheSizeGauge.GetMetricWithLabelValues("repo3")
+	if err != nil {
+		t.Error(err)
+	}
+
+	expectedRequests := testutil.ToFloat64(requestCounter) + 1
+	expectedServed := testutil.ToFloat64(servedCounter)
+	expectedMissed := testutil.ToFloat64(missedCounter) + 1
+	expectedErrorServed := testutil.ToFloat64(cacheErrorCounter)
+	expectedPackageNum := testutil.ToFloat64(cachePackageCounter) + 1
+	expectedSize := testutil.ToFloat64(cachePackageSize) + float64(info.Size())
+
 	req := httptest.NewRequest("GET", pacolocoURL+"/repo/repo3/test-1-any.pkg.tar.zst", nil)
 	w := httptest.NewRecorder()
 	pacolocoHandler(w, req)
@@ -314,6 +454,32 @@ func testRequestPackageFile(t *testing.T) {
 			w.Header().Get("Last-Modified"))
 	}
 
+	actualRequests := testutil.ToFloat64(requestCounter)
+	actualServed := testutil.ToFloat64(servedCounter)
+	actualMissed := testutil.ToFloat64(missedCounter)
+	actualErrorServed := testutil.ToFloat64(cacheErrorCounter)
+	actualPackageNum := testutil.ToFloat64(cachePackageCounter)
+	actualSize := testutil.ToFloat64(cachePackageSize)
+
+	if expectedRequests != actualRequests {
+		t.Errorf("Request metric check failed: expected %v, got %v", expectedRequests, actualRequests)
+	}
+	if expectedServed != actualServed {
+		t.Errorf("Served from cache metric check failed: expected %v, got %v", expectedServed, actualServed)
+	}
+	if expectedServed != actualServed {
+		t.Errorf("Cache miss metric check failed: expected %v, got %v", expectedMissed, actualMissed)
+	}
+	if expectedErrorServed != actualErrorServed {
+		t.Errorf("Cache error metric check failed: expected %v, got %v", expectedErrorServed, actualErrorServed)
+	}
+	if expectedPackageNum != actualPackageNum {
+		t.Errorf("Cache package number metric check failed: expected %v, got %v", expectedPackageNum, actualPackageNum)
+	}
+	if expectedSize != actualSize {
+		t.Errorf("Cache size metric check failed: expected %v, got %v", expectedSize, actualSize)
+	}
+
 	// check that pkg is cached
 	content, err = os.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo3", "test-1-any.pkg.tar.zst"))
 	if err != nil {
@@ -331,6 +497,11 @@ func testRequestPackageFile(t *testing.T) {
 	if err := os.Chtimes(pkgAtMirror, newDbModTime, newDbModTime); err != nil {
 		t.Fatal(err)
 	}
+
+	expectedRequests = testutil.ToFloat64(requestCounter) + 1
+	expectedServed = testutil.ToFloat64(servedCounter) + 1
+	expectedMissed = testutil.ToFloat64(missedCounter)
+	expectedErrorServed = testutil.ToFloat64(cacheErrorCounter)
 
 	req = httptest.NewRequest("GET", pacolocoURL+"/repo/repo3/test-1-any.pkg.tar.zst", nil)
 	w = httptest.NewRecorder()
@@ -386,6 +557,28 @@ func testFailover(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	requestCounter, err := cacheRequestsCounter.GetMetricWithLabelValues("failover")
+	if err != nil {
+		t.Error(err)
+	}
+	servedCounter, err := cacheServedCounter.GetMetricWithLabelValues("failover")
+	if err != nil {
+		t.Error(err)
+	}
+	missedCounter, err := cacheMissedCounter.GetMetricWithLabelValues("failover")
+	if err != nil {
+		t.Error(err)
+	}
+	cacheErrorCounter, err := cacheServingFailedCounter.GetMetricWithLabelValues("failover")
+	if err != nil {
+		t.Error(err)
+	}
+
+	expectedRequests := testutil.ToFloat64(requestCounter) + 1
+	expectedServed := testutil.ToFloat64(servedCounter)
+	expectedMissed := testutil.ToFloat64(missedCounter) + 1
+	expectedErrorServed := testutil.ToFloat64(cacheErrorCounter)
+
 	req := httptest.NewRequest("GET", pacolocoURL+"/repo/failover/test-1-any.pkg.tar.zst", nil)
 	w := httptest.NewRecorder()
 	pacolocoHandler(w, req)
@@ -405,5 +598,23 @@ func testFailover(t *testing.T) {
 	}
 	if resp.ContentLength != int64(len(pkgFileContent)) {
 		t.Errorf("Pacoloco returns incorrect length %v", resp.ContentLength)
+	}
+
+	actualRequests := testutil.ToFloat64(requestCounter)
+	actualServed := testutil.ToFloat64(servedCounter)
+	actualMissed := testutil.ToFloat64(missedCounter)
+	actualErrorServed := testutil.ToFloat64(cacheErrorCounter)
+
+	if expectedRequests != actualRequests {
+		t.Errorf("Request metric check failed: expected %v, got %v", expectedRequests, actualRequests)
+	}
+	if expectedServed != actualServed {
+		t.Errorf("Served from cache metric check failed: expected %v, got %v", expectedServed, actualServed)
+	}
+	if expectedServed != actualServed {
+		t.Errorf("Cache miss metric check failed: expected %v, got %v", expectedMissed, actualMissed)
+	}
+	if expectedErrorServed != actualErrorServed {
+		t.Errorf("Cache error metric check failed: expected %v, got %v", expectedErrorServed, actualErrorServed)
 	}
 }
