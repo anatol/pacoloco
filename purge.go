@@ -68,5 +68,4 @@ func purgeStaleFiles(cacheDir string, purgeFilesAfter int, repoName string) {
 	}
 	cachePackageGauge.WithLabelValues(repoName).Set(float64(packageNum))
 	cacheSizeGauge.WithLabelValues(repoName).Set(float64(packageSize))
-
 }

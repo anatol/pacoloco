@@ -117,12 +117,12 @@ func main() {
 
 	for repoName := range config.Repos {
 		cachePath := filepath.Join(config.CacheDir, "pkgs", repoName)
-		size, numberOfPackages, err := gatherCacheSizeAndNumOfPackages(cachePath)
+		totalCacheSize, totalPackageCount, err := gatherCacheStats(cachePath)
 		if err != nil {
 			log.Println("Gathering size failed for ", repoName)
 		}
-		cacheSizeGauge.WithLabelValues(repoName).Set(size)
-		cachePackageGauge.WithLabelValues(repoName).Set(numberOfPackages)
+		cacheSizeGauge.WithLabelValues(repoName).Set(totalCacheSize)
+		cachePackageGauge.WithLabelValues(repoName).Set(totalPackageCount)
 	}
 
 	if config.PurgeFilesAfter != 0 {
@@ -151,10 +151,11 @@ func main() {
 	log.Fatal(http.ListenAndServe(listenAddr, nil))
 }
 
-func gatherCacheSizeAndNumOfPackages(repoDir string) (float64, float64, error) {
+// walks through given directory and gathers its stats. Returns cache size in bytes and package count
+func gatherCacheStats(repoDir string) (totalCacheSize float64, totalPackageCount float64, err error) {
 	var size int64
 	var numberOfPackages int64
-	err := filepath.Walk(repoDir, func(path string, info os.FileInfo, err error) error {
+	err = filepath.Walk(repoDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -398,10 +399,10 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 // downloadFileAndSend downloads file from `url`, saves it to the given `localFileName`
 // file and sends to `clientWriter` at the same time.
 // The function returns whether the function sent the data to client and error if one occurred
-func downloadFile(upstream_url string, filePath string, ifModifiedSince time.Time, clientWriter http.ResponseWriter) (downloaded bool, err error) {
+func downloadFile(upstreamUrl string, filePath string, ifModifiedSince time.Time, clientWriter http.ResponseWriter) (downloaded bool, err error) {
 	var req *http.Request
 
-	u, err := url.Parse(upstream_url)
+	u, err := url.Parse(upstreamUrl)
 	if err != nil {
 		return
 	}
@@ -410,9 +411,9 @@ func downloadFile(upstream_url string, filePath string, ifModifiedSince time.Tim
 	if config.DownloadTimeout > 0 {
 		ctx, ctxCancel := context.WithTimeout(context.Background(), time.Duration(config.DownloadTimeout)*time.Second)
 		defer ctxCancel()
-		req, err = http.NewRequestWithContext(ctx, "GET", upstream_url, nil)
+		req, err = http.NewRequestWithContext(ctx, "GET", upstreamUrl, nil)
 	} else {
-		req, err = http.NewRequest("GET", upstream_url, nil)
+		req, err = http.NewRequest("GET", upstreamUrl, nil)
 	}
 	if err != nil {
 		return
@@ -445,7 +446,7 @@ func downloadFile(upstream_url string, filePath string, ifModifiedSince time.Tim
 	default:
 		// for most dbs signatures are optional, be quiet if the signature is not found
 		// quiet := resp.StatusCode == http.StatusNotFound && strings.HasSuffix(url, ".db.sig")
-		err = fmt.Errorf("unable to download url %s, status code is %d", upstream_url, resp.StatusCode)
+		err = fmt.Errorf("unable to download url %s, status code is %d", upstreamUrl, resp.StatusCode)
 		return
 	}
 
@@ -456,7 +457,7 @@ func downloadFile(upstream_url string, filePath string, ifModifiedSince time.Tim
 	var w io.Writer
 	w = file
 
-	log.Printf("downloading %v", upstream_url)
+	log.Printf("downloading %v", upstreamUrl)
 	if clientWriter != nil {
 		clientWriter.Header().Set("Content-Length", resp.Header.Get("Content-Length"))
 		clientWriter.Header().Set("Content-Type", "application/octet-stream")
