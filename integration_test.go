@@ -59,6 +59,7 @@ func TestPacolocoIntegrationWithPrefetching(t *testing.T) {
 	t.Run("testRequestNonExistingDb", testRequestNonExistingDb)
 	t.Run("testRequestExistingRepo", testRequestExistingRepo)
 	t.Run("testRequestExistingRepoWithDb", testRequestExistingRepoWithDb)
+	t.Run("testRequestDbMultipleTimes", testRequestDbMultipleTimes)
 	t.Run("testRequestPackageFile", testRequestPackageFile)
 	t.Run("testFailover", testFailover)
 	if _, err := os.Stat(path.Join(testPacolocoDir, DefaultDBName)); os.IsNotExist(err) {
@@ -104,6 +105,7 @@ func TestPacolocoIntegration(t *testing.T) {
 	t.Run("testRequestNonExistingDb", testRequestNonExistingDb)
 	t.Run("testRequestExistingRepo", testRequestExistingRepo)
 	t.Run("testRequestExistingRepoWithDb", testRequestExistingRepoWithDb)
+	t.Run("testRequestDbMultipleTimes", testRequestDbMultipleTimes)
 	t.Run("testRequestPackageFile", testRequestPackageFile)
 	t.Run("testFailover", testFailover)
 	if _, err := os.Stat(path.Join(testPacolocoDir, DefaultDBName)); !os.IsNotExist(err) {
@@ -117,7 +119,7 @@ func testInvalidURL(t *testing.T) {
 	pacolocoHandler(w, req)
 	resp := w.Result()
 	if resp.StatusCode != 404 {
-		t.Error("404 response expected")
+		t.Errorf("404 response expected, got %v", resp.StatusCode)
 	}
 }
 
@@ -128,7 +130,7 @@ func testRequestNonExistingDb(t *testing.T) {
 	pacolocoHandler(w, req)
 	resp := w.Result()
 	if resp.StatusCode != 404 {
-		t.Error("404 response expected")
+		t.Errorf("404 response expected, got %v", resp.StatusCode)
 	}
 
 	// check that no repo cached
@@ -169,7 +171,7 @@ func testRequestExistingRepo(t *testing.T) {
 	pacolocoHandler(w, req)
 	resp := w.Result()
 	if resp.StatusCode != 404 {
-		t.Error("404 response expected")
+		t.Errorf("404 response expected, got %v", resp.StatusCode)
 	}
 
 	actualRequests := testutil.ToFloat64(requestCounter)
@@ -267,6 +269,10 @@ func testRequestExistingRepoWithDb(t *testing.T) {
 			w.Header().Get("Last-Modified"))
 	}
 
+	// copying a file to server cache is operation that runs asynchronously to downloading from server
+	// wait a bit until cache operations settle down
+	time.Sleep(10 * time.Millisecond)
+
 	actualRequests := testutil.ToFloat64(requestCounter)
 	actualServed := testutil.ToFloat64(servedCounter)
 	actualMissed := testutil.ToFloat64(missedCounter)
@@ -327,6 +333,10 @@ func testRequestExistingRepoWithDb(t *testing.T) {
 	if string(content) != dbFileContent {
 		t.Errorf("Pacoloco cached incorrect db content: %v", string(content))
 	}
+
+	// copying a file to server cache is operation that runs asynchronously to downloading from server
+	// wait a bit until cache operations settle down
+	time.Sleep(10 * time.Millisecond)
 
 	actualRequests = testutil.ToFloat64(requestCounter)
 	actualServed = testutil.ToFloat64(servedCounter)
@@ -453,6 +463,9 @@ func testRequestPackageFile(t *testing.T) {
 			expectedModTime,
 			w.Header().Get("Last-Modified"))
 	}
+	// copying a file to server cache is operation that runs asynchronously to downloading from server
+	// wait a bit until cache operations settle down
+	time.Sleep(10 * time.Millisecond)
 
 	actualRequests := testutil.ToFloat64(requestCounter)
 	actualServed := testutil.ToFloat64(servedCounter)
@@ -533,6 +546,69 @@ func testRequestPackageFile(t *testing.T) {
 		t.Errorf("Incorrect Last-Modified received, expected: '%v' got: '%v'",
 			expectedModTime,
 			w.Header().Get("Last-Modified"))
+	}
+}
+
+func testRequestDbMultipleTimes(t *testing.T) {
+	// Requesting existing repo
+	repo4 := &Repo{
+		URL: mirrorURL + "/mirror4",
+	}
+	config.Repos["repo4"] = repo4
+	defer delete(config.Repos, "repo4")
+
+	if err := os.Mkdir(path.Join(mirrorDir, "mirror4"), os.ModePerm); err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(path.Join(mirrorDir, "mirror4"))
+
+	dbAtMirror := path.Join(mirrorDir, "mirror4", "test.db")
+	dbFileContent := "pacoloco/mirror4.db"
+
+	if err := os.WriteFile(dbAtMirror, []byte(dbFileContent), os.ModePerm); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest("GET", pacolocoURL+"/repo/repo4/test.db", nil)
+	w := httptest.NewRecorder()
+	pacolocoHandler(w, req)
+	resp := w.Result()
+	if resp.StatusCode != 200 {
+		t.Errorf("200 response expected, got %v", resp.StatusCode)
+	}
+	content, err := io.ReadAll(w.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != dbFileContent {
+		t.Errorf("Pacoloco cached incorrect db content: %v", string(content))
+	}
+	if resp.ContentLength != int64(len(dbFileContent)) {
+		t.Errorf("Pacoloco returns incorrect length %v", resp.ContentLength)
+	}
+
+	// check that repo is cached
+	if _, err = os.Stat(path.Join(testPacolocoDir, "pkgs", "repo4")); os.IsNotExist(err) {
+		t.Error("repo4 repo should be cached")
+	}
+	defer os.RemoveAll(path.Join(testPacolocoDir, "pkgs", "repo4"))
+
+	req2 := httptest.NewRequest("GET", pacolocoURL+"/repo/repo4/test.db", nil)
+	w2 := httptest.NewRecorder()
+	pacolocoHandler(w2, req2)
+	resp2 := w2.Result()
+	if resp2.StatusCode != 200 {
+		t.Errorf("200 response expected, got %v", resp2.StatusCode)
+	}
+	content2, err := io.ReadAll(w2.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content2) != dbFileContent {
+		t.Errorf("Pacoloco cached incorrect db content: %v", string(content2))
+	}
+	if resp2.ContentLength != int64(len(dbFileContent)) {
+		t.Errorf("Pacoloco returns incorrect length %v", resp2.ContentLength)
 	}
 }
 

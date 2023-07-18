@@ -60,7 +60,7 @@ func testPrefetchRequestNonExistingDb(t *testing.T) {
 
 	// check that no repo cached
 	if _, err := os.Stat(path.Join(testPacolocoDir, "pkgs", "test")); !os.IsNotExist(err) {
-		t.Error("test repo should not cached")
+		t.Error("test repo should not be cached")
 	}
 }
 
@@ -135,7 +135,7 @@ func testPrefetchRequestPackageFile(t *testing.T) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if string(content) != newContent {
+	if string(content) != pkgFileContent {
 		t.Errorf("Pacoloco cached incorrect db content: %v", string(content))
 	}
 }
@@ -168,6 +168,7 @@ func testPrefetchFailover(t *testing.T) {
 	if err != nil {
 		t.Errorf("Expected success, got %v", err)
 	}
+
 	content, err := os.ReadFile(path.Join(testPacolocoDir, "pkgs", "failover", "test-1-1-any.pkg.tar.zst"))
 	if err != nil {
 		t.Fatal(err)
@@ -203,7 +204,6 @@ func testPrefetchRealDB(t *testing.T) {
 
 func testPrefetchRequestExistingRepoWithDb(t *testing.T) {
 	// Requesting existing repo
-
 	repo2 := &Repo{
 		URL: mirrorURL + "/mirror2",
 	}
@@ -255,8 +255,7 @@ func testPrefetchRequestExistingRepoWithDb(t *testing.T) {
 	newDbModTime := time.Now()
 	os.Chtimes(dbAtMirror, newDbModTime, newDbModTime)
 
-	prefetchRequest("/repo/repo2/test.db", "")
-	if err != nil {
+	if err := prefetchRequest("/repo/repo2/test.db", ""); err != nil {
 		t.Errorf("Expected success, got %v", err)
 	}
 

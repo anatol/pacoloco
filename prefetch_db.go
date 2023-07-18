@@ -218,12 +218,12 @@ func getPkgsToUpdate() ([]PkgToUpdate, error) {
 }
 
 // add a pacoloco url of a DB in a db. This urls are used to download afterwards the db to know which packages should be prefetched.
-func updateDBRequestedDB(repoName string, path_ string, filename string) (MirrorDB, error) {
+func updateDBRequestedDB(repoName string, pathAtRepo string, filename string) (MirrorDB, error) {
 	now := time.Now()
 	if prefetchDB == nil {
 		log.Fatalf("prefetchDB is uninitialized")
 	}
-	urlDB := path.Join("/repo/", repoName, path_, filename)
+	urlDB := path.Join("/repo/", repoName, pathAtRepo, filename)
 	matches := pathRegex.FindStringSubmatch(urlDB)
 	if len(matches) == 0 {
 		return MirrorDB{}, fmt.Errorf("url '%v' is invalid, cannot save it for prefetching", urlDB)

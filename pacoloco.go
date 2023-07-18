@@ -1,20 +1,15 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -175,18 +170,6 @@ func pacolocoHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func forceCheckAtServer(fileName string) bool {
-	// Suffixes for mutable files. We need to check the files modification date at the server.
-	forceCheckFiles := []string{".db", ".db.sig", ".files"}
-
-	for _, e := range forceCheckFiles {
-		if strings.HasSuffix(fileName, e) {
-			return true
-		}
-	}
-	return false
-}
-
 var (
 	cacheRequestsCounter = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "pacoloco_cache_requests_total",
@@ -221,269 +204,87 @@ var (
 	}, []string{"repo", "upstream", "status"})
 )
 
-// A mutex map for files currently being downloaded
-// It is used to prevent downloading the same file with concurrent requests
-var (
-	downloadingFiles      = make(map[string]*sync.Mutex)
-	downloadingFilesMutex sync.Mutex
-)
-
 // force resources prefetching
-func prefetchRequest(url string, optionalCustomPath string) (err error) {
-	urlPath := url
-	matches := pathRegex.FindStringSubmatch(urlPath)
-	if len(matches) == 0 {
-		return fmt.Errorf("input url path '%v' does not match expected format", urlPath)
+func prefetchRequest(urlPath string, cachePath string) error {
+	f, err := parseRequestURL(urlPath)
+	if err != nil {
+		return err
 	}
-	repoName := matches[1]
-	path := matches[2]
-	fileName := matches[3]
-	repo, ok := config.Repos[repoName]
-	if !ok {
-		return fmt.Errorf("cannot find repo %s in the config file", repoName)
+
+	if f.getRepo() == nil {
+		return fmt.Errorf("cannot find repo %s in the config file", f.repoName)
 	}
-	// create cache directory if needed
-	cachePath := filepath.Join(config.CacheDir, "pkgs", repoName)
-	if _, err := os.Stat(cachePath); os.IsNotExist(err) {
-		if err := os.MkdirAll(cachePath, os.ModePerm); err != nil {
+	if cachePath == "" {
+		// use default cache path
+		if err := f.mkCacheDir(); err != nil {
 			return err
 		}
-	}
-	var filePath string
-	if optionalCustomPath != "" {
-		filePath = filepath.Join(optionalCustomPath, fileName)
 	} else {
-		filePath = filepath.Join(cachePath, fileName)
+		f.cacheDir = cachePath
+		f.cachedFilePath = filepath.Join(cachePath, f.fileName)
 	}
-	// mandatory update when prefetching,
 
-	mutexKey := repoName + ":" + fileName
-	downloadingFilesMutex.Lock()
-	fileMutex, ok := downloadingFiles[mutexKey]
-	if !ok {
-		fileMutex = &sync.Mutex{}
-		downloadingFiles[mutexKey] = fileMutex
+	d, err := getDownloader(f)
+	if err != nil {
+		return err
 	}
-	downloadingFilesMutex.Unlock()
-	fileMutex.Lock()
-	defer func() {
-		fileMutex.Unlock()
-		downloadingFilesMutex.Lock()
-		delete(downloadingFiles, mutexKey)
-		downloadingFilesMutex.Unlock()
-	}()
+	if d != nil {
+		err = d.waitForCompletion()
+		d.decrementUsage()
+	}
 
-	// refresh the data in case if the file has been download while we were waiting for the mutex
-	ifLater := time.Time{} // spoofed to avoid rewriting downloadFile
-	downloaded := false
-	for _, url := range repo.getUrls() {
-		downloaded, err = downloadFile(url+path+"/"+fileName, filePath, ifLater, nil)
-		if downloaded {
-			break
+	if err == nil && config.Prefetch != nil {
+		if !strings.HasSuffix(f.fileName, ".sig") && !strings.HasSuffix(f.fileName, ".db") {
+			updateDBRequestedFile(f.repoName, f.fileName) // update info for prefetching
+		} else if strings.HasSuffix(f.fileName, ".db") {
+			updateDBRequestedDB(f.repoName, f.pathAtRepo, f.fileName)
 		}
-	}
-	if downloaded {
-		cacheMissedCounter.WithLabelValues(repoName).Inc()
-		info, _ := os.Stat(filePath)
-		cacheSizeGauge.WithLabelValues(repoName).Add(float64(info.Size()))
-		cachePackageGauge.WithLabelValues(repoName).Inc()
-	}
-
-	if downloaded && config.Prefetch != nil {
-		if !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
-			updateDBPrefetchedFile(repoName, fileName) // update info for prefetching
-		}
-	}
-
-	if err == nil && !downloaded {
-		err = fmt.Errorf("not downloaded")
 	}
 
 	return err
 }
 
 func handleRequest(w http.ResponseWriter, req *http.Request) error {
-	urlPath := req.URL.Path
-	matches := pathRegex.FindStringSubmatch(urlPath)
-	if len(matches) == 0 {
-		return fmt.Errorf("input url path '%v' does not match expected format", urlPath)
+	f, err := parseRequestURL(req.URL.Path)
+	if err != nil {
+		return err
 	}
-	repoName := matches[1]
-	path := matches[2]
-	fileName := matches[3]
-	repo, ok := config.Repos[repoName]
-	if !ok {
-		return fmt.Errorf("cannot find repo %s in the config file", repoName)
+
+	if f.getRepo() == nil {
+		return fmt.Errorf("cannot find repo %s in the config file", f.repoName)
 	}
-	cacheRequestsCounter.WithLabelValues(repoName).Inc()
+
+	cacheRequestsCounter.WithLabelValues(f.repoName).Inc()
+
 	// create cache directory if needed
-	cachePath := filepath.Join(config.CacheDir, "pkgs", repoName)
-	if _, err := os.Stat(cachePath); os.IsNotExist(err) {
-		if err := os.MkdirAll(cachePath, os.ModePerm); err != nil {
+	if err := f.mkCacheDir(); err != nil {
+		return err
+	}
+
+	modTime, r, err := getDownloadReader(f)
+	if err != nil {
+		cacheServingFailedCounter.WithLabelValues(f.repoName).Inc()
+		return err
+	}
+	if r == nil {
+		log.Printf("serving cached file for %v", f.key())
+		http.ServeFile(w, req, f.cachedFilePath)
+		cacheServedCounter.WithLabelValues(f.repoName).Inc()
+	} else {
+		http.ServeContent(w, req, f.fileName, modTime, r)
+		cacheMissedCounter.WithLabelValues(f.repoName).Inc()
+		if err := r.Close(); err != nil {
 			return err
 		}
 	}
 
-	filePath := filepath.Join(cachePath, fileName)
-	stat, err := os.Stat(filePath)
-	noFile := err != nil
-	requestFromServer := noFile || forceCheckAtServer(fileName)
-
-	if requestFromServer {
-		mutexKey := repoName + ":" + fileName
-		downloadingFilesMutex.Lock()
-		fileMutex, ok := downloadingFiles[mutexKey]
-		if !ok {
-			fileMutex = &sync.Mutex{}
-			downloadingFiles[mutexKey] = fileMutex
-		}
-		downloadingFilesMutex.Unlock()
-		fileMutex.Lock()
-		defer func() {
-			fileMutex.Unlock()
-			downloadingFilesMutex.Lock()
-			delete(downloadingFiles, mutexKey)
-			downloadingFilesMutex.Unlock()
-		}()
-
-		// refresh the data in case if the file has been download while we were waiting for the mutex
-		stat, err = os.Stat(filePath)
-		noFile = err != nil
-		requestFromServer = noFile || forceCheckAtServer(fileName)
-	}
-
-	var downloaded bool
-	if requestFromServer {
-		ifLater, _ := http.ParseTime(req.Header.Get("If-Modified-Since"))
-		if noFile {
-			// ignore If-Modified-Since and download file if it does not exist in the cache
-			ifLater = time.Time{}
-		} else if stat.ModTime().After(ifLater) {
-			ifLater = stat.ModTime()
-		}
-
-		for _, url := range repo.getUrls() {
-			downloaded, err = downloadFile(url+path+"/"+fileName, filePath, ifLater, w)
-			if err == nil {
-				break
-			}
+	if err == nil && config.Prefetch != nil {
+		if !strings.HasSuffix(f.fileName, ".sig") && !strings.HasSuffix(f.fileName, ".db") {
+			updateDBRequestedFile(f.repoName, f.fileName) // update info for prefetching
+		} else if strings.HasSuffix(f.fileName, ".db") {
+			updateDBRequestedDB(f.repoName, f.pathAtRepo, f.fileName)
 		}
 	}
 
-	if !downloaded {
-		log.Printf("serving cached file %v", filePath)
-		if _, pathErr := os.Stat(filePath); pathErr == nil {
-			cacheServedCounter.WithLabelValues(repoName).Inc()
-		} else if os.IsNotExist(pathErr) {
-			cacheServingFailedCounter.WithLabelValues(repoName).Inc()
-		}
-		http.ServeFile(w, req, filePath)
-	}
-	if downloaded {
-		cacheMissedCounter.WithLabelValues(repoName).Inc()
-		info, _ := os.Stat(filePath)
-		cacheSizeGauge.WithLabelValues(repoName).Add(float64(info.Size()))
-		cachePackageGauge.WithLabelValues(repoName).Inc()
-	}
-
-	if downloaded && config.Prefetch != nil {
-		if !strings.HasSuffix(fileName, ".sig") && !strings.HasSuffix(fileName, ".db") {
-			updateDBRequestedFile(repoName, fileName) // update info for prefetching
-		} else if strings.HasSuffix(fileName, ".db") {
-			updateDBRequestedDB(repoName, path, fileName)
-		}
-	}
 	return err
-}
-
-// downloadFileAndSend downloads file from `url`, saves it to the given `localFileName`
-// file and sends to `clientWriter` at the same time.
-// The function returns whether the function sent the data to client and error if one occurred
-func downloadFile(upstreamUrl string, filePath string, ifModifiedSince time.Time, clientWriter http.ResponseWriter) (downloaded bool, err error) {
-	var req *http.Request
-
-	u, err := url.Parse(upstreamUrl)
-	if err != nil {
-		return
-	}
-
-	host := u.Host
-	if config.DownloadTimeout > 0 {
-		ctx, ctxCancel := context.WithTimeout(context.Background(), time.Duration(config.DownloadTimeout)*time.Second)
-		defer ctxCancel()
-		req, err = http.NewRequestWithContext(ctx, "GET", upstreamUrl, nil)
-	} else {
-		req, err = http.NewRequest("GET", upstreamUrl, nil)
-	}
-	if err != nil {
-		return
-	}
-
-	if !ifModifiedSince.IsZero() {
-		req.Header.Set("If-Modified-Since", ifModifiedSince.UTC().Format(http.TimeFormat))
-	}
-	// golang requests compression for all requests except HEAD
-	// some servers return compressed data without Content-Length header info
-	// disable compression as it useless for package data
-	req.Header.Add("Accept-Encoding", "identity")
-	req.Header.Set("User-Agent", config.UserAgent)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return
-	}
-	defer resp.Body.Close()
-
-	repoName := filepath.Base(filepath.Dir(filePath))
-	downloadedFilesCounter.WithLabelValues(repoName, host, strconv.Itoa(resp.StatusCode)).Inc()
-
-	switch resp.StatusCode {
-	case http.StatusOK:
-		break
-	case http.StatusNotModified:
-		// either pacoloco or client has the latest version, no need to redownload it
-		return
-	default:
-		// for most dbs signatures are optional, be quiet if the signature is not found
-		// quiet := resp.StatusCode == http.StatusNotFound && strings.HasSuffix(url, ".db.sig")
-		err = fmt.Errorf("unable to download url %s, status code is %d", upstreamUrl, resp.StatusCode)
-		return
-	}
-
-	file, err := os.Create(filePath)
-	if err != nil {
-		return
-	}
-	var w io.Writer
-	w = file
-
-	log.Printf("downloading %v", upstreamUrl)
-	if clientWriter != nil {
-		clientWriter.Header().Set("Content-Length", resp.Header.Get("Content-Length"))
-		clientWriter.Header().Set("Content-Type", "application/octet-stream")
-		clientWriter.Header().Set("Last-Modified", resp.Header.Get("Last-Modified"))
-		w = io.MultiWriter(w, clientWriter)
-	}
-
-	_, err = io.Copy(w, resp.Body)
-	_ = file.Close() // Close the file early to make sure the file modification time is set
-	if err != nil {
-		// remove the cached file if download was not successful
-		log.Print(err)
-		_ = os.Remove(filePath)
-		return
-	}
-	downloaded = true
-
-	if lastModified := resp.Header.Get("Last-Modified"); lastModified != "" {
-		lastModified, parseErr := http.ParseTime(lastModified)
-		err = parseErr
-		if err == nil {
-			if err = os.Chtimes(filePath, time.Now(), lastModified); err != nil {
-				return
-			}
-		}
-	}
-
-	return
 }

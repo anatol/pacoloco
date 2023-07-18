@@ -76,8 +76,8 @@ func TestPurge(t *testing.T) {
 	}
 	os.Chtimes(fileOutsideRepo, thresholdTime.Add(-time.Hour), thresholdTime.Add(-time.Hour))
 
-	expectedPackageNum := testutil.ToFloat64(cachePackageNum) + 2
-	expectedSize := testutil.ToFloat64(cachePackageSize) + float64(infoToStay.Size()+infoToBePurgedLater.Size())
+	expectedPackageNum := float64(2)
+	expectedSize := float64(infoToStay.Size() + infoToBePurgedLater.Size())
 
 	purgeStaleFiles(testPacolocoDir, purgeFilesAfter, "purgerepo")
 
