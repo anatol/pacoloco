@@ -5,8 +5,7 @@ import (
 	"path"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/stretchr/testify/require"
 )
 
 // test that `parseConfig()` can successfully load YAML config
@@ -56,14 +55,7 @@ repos:
 		DownloadTimeout: 200,
 		Prefetch:        &RefreshPeriod{Cron: "0 0 3 * * * *", TTLUnaccessed: 5, TTLUnupdated: 200},
 	}
-	if !cmp.Equal(*got, *want, cmpopts.IgnoreFields(Config{}, "Prefetch"), cmpopts.IgnoreUnexported(Repo{})) {
-		t.Errorf("got %v, want %v", *got, *want)
-	}
-	gotR := *(*got).Prefetch
-	wantR := *(*want).Prefetch
-	if !cmp.Equal(gotR, wantR) {
-		t.Errorf("got %v, want %v", gotR, wantR)
-	}
+	require.Equal(t, want, got)
 }
 
 // test that `purgeFilesAfter` is being read correctly
@@ -88,9 +80,7 @@ repos:
 		Prefetch:        nil,
 	}
 
-	if !cmp.Equal(*got, *want, cmpopts.IgnoreUnexported(Repo{})) {
-		t.Errorf("got %v, want %v", *got, *want)
-	}
+	require.Equal(t, want, got)
 }
 
 // test that config works without `purgeFilesAfter`
@@ -114,9 +104,7 @@ repos:
 		Prefetch:        nil,
 	}
 
-	if !cmp.Equal(*got, *want, cmpopts.IgnoreUnexported(Repo{})) {
-		t.Errorf("got %v, want %v", *got, *want)
-	}
+	require.Equal(t, want, got)
 }
 
 func TestLoadConfigWithMirrorlist(t *testing.T) {
@@ -124,9 +112,7 @@ func TestLoadConfigWithMirrorlist(t *testing.T) {
 	tmpfile := path.Join(temp, "tmpMirrorFile")
 
 	f, err := os.Create(tmpfile)
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 	f.Close()
 	got := parseConfig([]byte(`
 cache_dir: ` + temp + `
@@ -153,14 +139,7 @@ repos:
 		DownloadTimeout: 200,
 		Prefetch:        &RefreshPeriod{Cron: "0 0 3 * * * *", TTLUnaccessed: 5, TTLUnupdated: 200},
 	}
-	if !cmp.Equal(*got, *want, cmpopts.IgnoreFields(Config{}, "Prefetch"), cmpopts.IgnoreUnexported(Repo{})) {
-		t.Errorf("got %v, want %v", *got, *want)
-	}
-	gotR := *(*got).Prefetch
-	wantR := *(*want).Prefetch
-	if !cmp.Equal(gotR, wantR) {
-		t.Errorf("got %v, want %v", gotR, wantR)
-	}
+	require.Equal(t, want, got)
 }
 
 func TestLoadConfigWithMirrorlistTimestamps(t *testing.T) {
@@ -182,7 +161,5 @@ repos:
 			},
 		},
 	}
-	if !cmp.Equal(*got, *want, cmpopts.IgnoreUnexported(Repo{})) {
-		t.Errorf("got %v, want %v", *got, *want)
-	}
+	require.Equal(t, want, got)
 }

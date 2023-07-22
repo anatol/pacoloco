@@ -9,9 +9,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestParallelDownload(t *testing.T) {
@@ -20,7 +23,7 @@ func TestParallelDownload(t *testing.T) {
 		out := fmt.Sprintf("This is a sample content for %s", r.URL.Path)
 
 		w.Header().Add("Last-Modified", time.Now().Format(http.TimeFormat))
-		w.Header().Add("Content-Length", fmt.Sprintf("%d", len(out)))
+		w.Header().Add("Content-Length", strconv.Itoa(len(out)))
 
 		time.Sleep(time.Second) // simulate a slow network
 		w.Write([]byte(out))
@@ -30,17 +33,13 @@ func TestParallelDownload(t *testing.T) {
 
 	srv := &http.Server{Addr: ":0", Handler: mux}
 	ln, err := net.Listen("tcp", srv.Addr)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	go srv.Serve(ln)
 	defer srv.Shutdown(context.Background())
 
 	// setup a pacoloco proxy
 	testPacolocoDir, err := os.MkdirTemp(os.TempDir(), "*-pacoloco-repo")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer os.RemoveAll(testPacolocoDir)
 
 	repo := &Repo{
@@ -69,6 +68,8 @@ func TestParallelDownload(t *testing.T) {
 
 	for i := 0; i < num; i++ {
 		go func() {
+			defer counter.Done()
+
 			f := files[rand.Int()%len(files)]
 			content := "This is a sample content for /myrepo/" + f
 
@@ -84,19 +85,12 @@ func TestParallelDownload(t *testing.T) {
 			}
 
 			w := httptest.NewRecorder()
-			if err := handleRequest(w, req); err != nil {
-				t.Error(err)
-			}
+			require.NoError(t, handleRequest(w, req))
 			res := w.Result()
 			defer res.Body.Close()
 			data, err := io.ReadAll(res.Body)
-			if err != nil {
-				t.Errorf("expected error to be nil got %v", err)
-			}
-			if string(data) != content {
-				t.Errorf("expected '%s' got '%s'", content, string(data))
-			}
-			counter.Done()
+			require.NoError(t, err)
+			require.Equal(t, content, string(data))
 		}()
 	}
 
@@ -106,38 +100,20 @@ func TestParallelDownload(t *testing.T) {
 }
 
 func TestRequestedFile(t *testing.T) {
-	path := "/repo/noPath/foobar-3.3.6-7-x86_64.pkg.tar.zst"
+	config = &Config{}
 
-	f, err := parseRequestURL(path)
-	if err != nil {
-		t.Error(err)
+	data := []struct {
+		input, urlPath, key string
+	}{
+		{"/repo/noPath/foobar-3.3.6-7-x86_64.pkg.tar.zst", "/foobar-3.3.6-7-x86_64.pkg.tar.zst", "noPath/foobar-3.3.6-7-x86_64.pkg.tar.zst"},
+		{"/repo/extened/path/bar-222.pkg.tar.zst", "/path/bar-222.pkg.tar.zst", "extened/path/bar-222.pkg.tar.zst"},
+		{"/repo/upstream/extra/os/x86_64/linux-5.19.pkg.tar.zst", "/extra/os/x86_64/linux-5.19.pkg.tar.zst", "upstream/extra/os/x86_64/linux-5.19.pkg.tar.zst"},
 	}
-	if f.urlPath() != "/foobar-3.3.6-7-x86_64.pkg.tar.zst" {
-		t.Errorf("expected '%s; got '%s", "/foobar-3.3.6-7-x86_64.pkg.tar.zst", f.urlPath())
-	}
-	if f.key() != "noPath/foobar-3.3.6-7-x86_64.pkg.tar.zst" {
-		t.Errorf("expected '%s; got '%s", "noPath/foobar-3.3.6-7-x86_64.pkg.tar.zst", f.key())
-	}
-	path = "/repo/extened/path/bar-222.pkg.tar.zst"
-	f, err = parseRequestURL(path)
-	if err != nil {
-		t.Error(err)
-	}
-	if f.urlPath() != "/path/bar-222.pkg.tar.zst" {
-		t.Errorf("expected '%s; got '%s", "/path/bar-222.pkg.tar.zst", f.urlPath())
-	}
-	if f.key() != "extened/path/bar-222.pkg.tar.zst" {
-		t.Errorf("expected '%s; got '%s", "extened/path/bar-222.pkg.tar.zst", f.key())
-	}
-	path = "/repo/upstream/extra/os/x86_64/linux-5.19.pkg.tar.zst"
-	f, err = parseRequestURL(path)
-	if err != nil {
-		t.Error(err)
-	}
-	if f.urlPath() != "/extra/os/x86_64/linux-5.19.pkg.tar.zst" {
-		t.Errorf("expected '%s; got '%s", "/extra/os/x86_64/linux-5.19.pkg.tar.zst", f.urlPath())
-	}
-	if f.key() != "upstream/extra/os/x86_64/linux-5.19.pkg.tar.zst" {
-		t.Errorf("expected '%s; got '%s", "upstream/extra/os/x86_64/linux-5.19.pkg.tar.zst", f.key())
+
+	for _, d := range data {
+		f, err := parseRequestURL(d.input)
+		require.NoError(t, err)
+		require.Equal(t, d.urlPath, f.urlPath())
+		require.Equal(t, d.key, f.key())
 	}
 }

@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMain(m *testing.M) {
@@ -21,21 +21,15 @@ func TestMain(m *testing.M) {
 func TestPathMatcher(t *testing.T) {
 	pathCheck := func(url string, repoName string, path string, fileName string) {
 		matches := pathRegex.FindStringSubmatch(url)
-		if matches == nil {
-			t.Errorf("url '%v' does not match regexp", url)
-		}
+		require.NotNilf(t, matches, "url '%v' does not match regexp", url)
 		expected := []string{url, repoName, path, fileName}
 
-		if !cmp.Equal(matches, expected) {
-			t.Errorf("expected '%v' but regexp submatches '%v'", expected, matches)
-		}
+		require.Equal(t, expected, matches)
 	}
 
 	pathFails := func(url string) {
 		matches := pathRegex.FindStringSubmatch(url)
-		if matches != nil {
-			t.Errorf("url '%v' expected to fail matching", url)
-		}
+		require.Nil(t, matches)
 	}
 
 	pathFails("")
@@ -50,14 +44,10 @@ func TestPathMatcher(t *testing.T) {
 
 func TestForceCheckAtServer(t *testing.T) {
 	forceCheck := func(name string) {
-		if !forceCheckAtServer(name) {
-			t.Errorf("File '%v' expected to force check at server", name)
-		}
+		require.Truef(t, forceCheckAtServer(name), "File '%v' expected to force check at server", name)
 	}
 	doNotForceCheck := func(name string) {
-		if forceCheckAtServer(name) {
-			t.Errorf("File '%v' expected to not force check at server", name)
-		}
+		require.Falsef(t, forceCheckAtServer(name), "File '%v' expected to not force check at server", name)
 	}
 
 	forceCheck("core.db")

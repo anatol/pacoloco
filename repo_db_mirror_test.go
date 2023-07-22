@@ -5,13 +5,13 @@ import (
 	"bufio"
 	"compress/gzip"
 	"io"
-	"log"
 	"os"
 	"path"
 	"strings"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/require"
+
 	"github.com/klauspost/compress/zstd"
 )
 
@@ -157,11 +157,9 @@ gettext
 }
 
 // creates a test tar file
-func createDbTarball(tarballFilePath string, content []testTarDB) {
+func createDbTarball(t *testing.T, tarballFilePath string, content []testTarDB) {
 	file, err := os.Create(tarballFilePath)
-	if err != nil {
-		log.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer file.Close()
 
 	gzipWriter := gzip.NewWriter(file)
@@ -170,90 +168,65 @@ func createDbTarball(tarballFilePath string, content []testTarDB) {
 	tarWriter := tar.NewWriter(gzipWriter)
 	defer tarWriter.Close()
 
-	for _, t := range content {
-		pkgName := t.PkgName
-		content := t.Content
-		addFileToTarWriter(pkgName, content, tarWriter)
+	for _, c := range content {
+		require.NoError(t, addFileToTarWriter(c.PkgName, c.Content, tarWriter))
 	}
 }
 
 // adds a file to the tar under pkgname/desc
-func addFileToTarWriter(pkgName string, content string, tarWriter *tar.Writer) {
+func addFileToTarWriter(pkgName string, content string, tarWriter *tar.Writer) error {
 	header := &tar.Header{
 		Name: path.Join(pkgName, "desc"),
 		Size: int64(len(content)),
 	}
 
 	if err := tarWriter.WriteHeader(header); err != nil {
-		log.Fatal(err)
+		return err
 	}
 	if _, err := io.Copy(tarWriter, strings.NewReader(content)); err != nil {
-		log.Fatal(err)
+		return err
 	}
+	return nil
 }
 
 // Uncompresses a gzip file
 func TestUncompressGZ(t *testing.T) {
 	err := uncompressGZ("nope", "nope")
 	tmpDir := testSetupHelper(t)
-	if err == nil {
-		t.Errorf("Should raise an error")
-	}
+	require.Error(t, err)
 	filePath := path.Join(tmpDir, "test.gz")
 	testString := ``
 	gzipfile, err := os.Create(filePath)
-	if err != nil {
-		log.Fatal(err)
-	}
+	require.NoError(t, err)
 	writer := gzip.NewWriter(gzipfile)
 	reader := strings.NewReader(testString)
-	if _, err = io.Copy(writer, reader); err != nil {
-		log.Fatal(err)
-	}
+	_, err = io.Copy(writer, reader)
+	require.NoError(t, err)
 	writer.Close()
-	if err = uncompressGZ(filePath, filePath+".uncompressed"); err != nil {
-		log.Fatal(err)
-	}
+	require.NoError(t, uncompressGZ(filePath, filePath+".uncompressed"))
 	byteStr, err := os.ReadFile(filePath + ".uncompressed")
-	if string(byteStr) != testString {
-		t.Errorf("Expected %v, got %v ", testString, string(byteStr))
-	}
-	if err != nil {
-		log.Fatal(err)
-	}
+	require.NoError(t, err)
+	require.Equal(t, string(byteStr), testString)
 }
 
 func TestUncompressZSTD(t *testing.T) {
 	err := uncompressZSTD("nope", "nope")
 	tmpDir := testSetupHelper(t)
-	if err == nil {
-		t.Errorf("Should raise an error")
-	}
+	require.Error(t, err)
 	filePath := path.Join(tmpDir, "test.zstd")
 	testString := ``
 	zstdfile, err := os.Create(filePath)
-	if err != nil {
-		log.Fatal(err)
-	}
+	require.NoError(t, err)
 	writer, err := zstd.NewWriter(zstdfile)
-	if err != nil {
-		log.Fatal(err)
-	}
+	require.NoError(t, err)
 	reader := strings.NewReader(testString)
-	if _, err = io.Copy(writer, reader); err != nil {
-		log.Fatal(err)
-	}
+	_, err = io.Copy(writer, reader)
+	require.NoError(t, err)
 	writer.Close()
-	if err = uncompressZSTD(filePath, filePath+".uncompressed"); err != nil {
-		log.Fatal(err)
-	}
+	require.NoError(t, uncompressZSTD(filePath, filePath+".uncompressed"))
 	byteStr, err := os.ReadFile(filePath + ".uncompressed")
-	if string(byteStr) != testString {
-		t.Errorf("Expected %v, got %v ", testString, string(byteStr))
-	}
-	if err != nil {
-		log.Fatal(err)
-	}
+	require.Equal(t, string(byteStr), testString)
+	require.NoError(t, err)
 }
 
 func TestUncompressZSTDBomb(t *testing.T) {
@@ -265,9 +238,7 @@ func TestUncompressZSTDBomb(t *testing.T) {
 	var zstdBombSize int64
 	zstdBombSize = 120 * 1024 * 1024
 	zstdfile, err := os.Create(filePath)
-	if err != nil {
-		log.Fatal(err)
-	}
+	require.NoError(t, err)
 	zero, err := os.Open("/dev/zero")
 	if err != nil {
 		t.Skip("Cannot open /dev/zero, skipping gzip bomb test")
@@ -275,9 +246,8 @@ func TestUncompressZSTDBomb(t *testing.T) {
 	defer zero.Close()
 	writer := gzip.NewWriter(zstdfile)
 	reader := io.LimitReader(bufio.NewReader(zero), zstdBombSize)
-	if _, err = io.Copy(writer, reader); err != nil {
-		log.Fatal(err)
-	}
+	_, err = io.Copy(writer, reader)
+	require.NoError(t, err)
 	writer.Close()
 	err = uncompressGZ(filePath, filePath+".uncompressed")
 	if err != nil {
@@ -290,9 +260,7 @@ func TestUncompressZSTDBomb(t *testing.T) {
 		return
 	}
 	size := fi.Size()
-	if size >= zstdBombSize {
-		log.Fatal("It fully extracted the zstd bomb, this shouldn't happen")
-	}
+	require.Less(t, size, zstdBombSize, "It fully extracted the zstd bomb, this shouldn't happen")
 }
 
 func TestExtractFilenamesFromTar(t *testing.T) {
@@ -300,53 +268,36 @@ func TestExtractFilenamesFromTar(t *testing.T) {
 	filePath := path.Join(tmpDir, "test.gz")
 	testString := ``
 	gzipfile, err := os.Create(filePath)
-	if err != nil {
-		log.Fatal(err)
-	}
+	require.NoError(t, err)
 	writer := gzip.NewWriter(gzipfile)
 	reader := strings.NewReader(testString)
-	if _, err = io.Copy(writer, reader); err != nil {
-		log.Fatal(err)
-	}
+	_, err = io.Copy(writer, reader)
+	require.NoError(t, err)
 	writer.Close()
-	if _, err = extractFilenamesFromTar("nope"); err == nil {
-		log.Fatal("Should raise an error")
-	}
+	_, err = extractFilenamesFromTar("nope")
+	require.Error(t, err)
 	// now create a valid db file
 	filePath = path.Join(tmpDir, "core.db")
-	createDbTarball(filePath, getTestTarDB())
-	if err = uncompressGZ(filePath, filePath+".uncompressed"); err != nil {
-		log.Fatal(err)
-	}
+	createDbTarball(t, filePath, getTestTarDB())
+	require.NoError(t, uncompressGZ(filePath, filePath+".uncompressed"))
 	got, err := extractFilenamesFromTar(filePath + ".uncompressed")
-	if err != nil {
-		log.Fatal(err)
-	}
+	require.NoError(t, err)
 	want := []string{"acl-2.3.1-1-x86_64.pkg.tar.zst", "attr-2.5.1-1-x86_64.pkg.tar.zst"}
-	if !cmp.Equal(got, want) {
-		log.Fatalf("Want %v, got %v", want, got)
-	}
+	require.Equal(t, want, got)
 }
 
 func TestGetPacolocoURL(t *testing.T) {
 	// create a package
 	got := getPacolocoURL(Package{PackageName: "webkit2gtk", RepoName: "testRepo", Version: "2.26.4-1", Arch: "x86_64"}, "")
 	want := "/repo/testRepo/webkit2gtk-2.26.4-1-x86_64"
-	if got != want {
-		t.Errorf("Want %v, got %v", want, got)
-	}
+	require.Equal(t, want, got)
 }
 
 func TestBuildMirrorPkg(t *testing.T) {
 	got, err := buildMirrorPkg("libstdc++5-3.3.6-7-x86_64.pkg.tar.zst", "testRepo", "community")
-	if err != nil {
-		log.Fatal(err)
-	}
+	require.NoError(t, err)
 	want := MirrorPackage{PackageName: "libstdc++5", RepoName: "testRepo", Version: "3.3.6-7", Arch: "x86_64", DownloadURL: "/repo/testRepo/community/libstdc++5-3.3.6-7-x86_64", FileExt: ".pkg.tar.zst"}
-	if !cmp.Equal(got, want) {
-		t.Errorf("Got %v, want %v", got, want)
-	}
-	if _, err = buildMirrorPkg("webkit2gtk-2.26.4-1-x86_6-4.pkg.tar.zst", "testRepo", ""); err == nil {
-		t.Errorf("Should have thrown an error cause the string is invalid")
-	}
+	require.Equal(t, want, got)
+	_, err = buildMirrorPkg("webkit2gtk-2.26.4-1-x86_6-4.pkg.tar.zst", "testRepo", "")
+	require.Errorf(t, err, "Should have thrown an error cause the string is invalid")
 }

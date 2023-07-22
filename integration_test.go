@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -24,9 +25,7 @@ var (
 func TestPacolocoIntegrationWithPrefetching(t *testing.T) {
 	var err error
 	mirrorDir, err = os.MkdirTemp(os.TempDir(), "*-pacoloco-mirror")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer os.RemoveAll(mirrorDir)
 
 	// For easier setup we are going to serve several Arch mirror trees by one
@@ -37,9 +36,7 @@ func TestPacolocoIntegrationWithPrefetching(t *testing.T) {
 
 	// Now setup pacoloco cache dir
 	testPacolocoDir, err = os.MkdirTemp(os.TempDir(), "*-pacoloco-repo")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer os.RemoveAll(testPacolocoDir)
 	notInvokingPrefetchTime := time.Now().Add(-time.Hour) // an hour ago
 	config = &Config{
@@ -62,17 +59,15 @@ func TestPacolocoIntegrationWithPrefetching(t *testing.T) {
 	t.Run("testRequestDbMultipleTimes", testRequestDbMultipleTimes)
 	t.Run("testRequestPackageFile", testRequestPackageFile)
 	t.Run("testFailover", testFailover)
-	if _, err := os.Stat(path.Join(testPacolocoDir, DefaultDBName)); os.IsNotExist(err) {
-		t.Errorf("DB file should be created!")
-	}
+
+	_, err = os.Stat(path.Join(testPacolocoDir, DefaultDBName))
+	require.NotErrorIs(t, err, os.ErrNotExist, "DB file should be created!")
 }
 
 func TestPacolocoIntegration(t *testing.T) {
 	var err error
 	mirrorDir, err = os.MkdirTemp(os.TempDir(), "*-pacoloco-mirror")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer os.RemoveAll(mirrorDir)
 
 	// For easier setup we are going to serve several Arch mirror trees by one
@@ -83,9 +78,7 @@ func TestPacolocoIntegration(t *testing.T) {
 
 	// Now setup pacoloco cache dir
 	testPacolocoDir, err = os.MkdirTemp(os.TempDir(), "*-pacoloco-repo")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer os.RemoveAll(testPacolocoDir)
 
 	config = &Config{
@@ -108,9 +101,9 @@ func TestPacolocoIntegration(t *testing.T) {
 	t.Run("testRequestDbMultipleTimes", testRequestDbMultipleTimes)
 	t.Run("testRequestPackageFile", testRequestPackageFile)
 	t.Run("testFailover", testFailover)
-	if _, err := os.Stat(path.Join(testPacolocoDir, DefaultDBName)); !os.IsNotExist(err) {
-		t.Errorf("DB file shouldn't be created!")
-	}
+
+	_, err = os.Stat(path.Join(testPacolocoDir, DefaultDBName))
+	require.ErrorIs(t, err, os.ErrNotExist, "DB file shouldn't be created!")
 }
 
 func testInvalidURL(t *testing.T) {
@@ -118,9 +111,7 @@ func testInvalidURL(t *testing.T) {
 	w := httptest.NewRecorder()
 	pacolocoHandler(w, req)
 	resp := w.Result()
-	if resp.StatusCode != 404 {
-		t.Errorf("404 response expected, got %v", resp.StatusCode)
-	}
+	require.Equal(t, resp.StatusCode, 404)
 }
 
 func testRequestNonExistingDb(t *testing.T) {
@@ -129,14 +120,11 @@ func testRequestNonExistingDb(t *testing.T) {
 	w := httptest.NewRecorder()
 	pacolocoHandler(w, req)
 	resp := w.Result()
-	if resp.StatusCode != 404 {
-		t.Errorf("404 response expected, got %v", resp.StatusCode)
-	}
+	require.Equal(t, resp.StatusCode, 404)
 
 	// check that no repo cached
-	if _, err := os.Stat(path.Join(testPacolocoDir, "pkgs", "test")); !os.IsNotExist(err) {
-		t.Error("test repo should not cached")
-	}
+	_, err := os.Stat(path.Join(testPacolocoDir, "pkgs", "test"))
+	require.ErrorIs(t, err, os.ErrNotExist, "test repo should not cached")
 }
 
 func testRequestExistingRepo(t *testing.T) {
@@ -145,21 +133,13 @@ func testRequestExistingRepo(t *testing.T) {
 	defer delete(config.Repos, "repo1")
 
 	requestCounter, err := cacheRequestsCounter.GetMetricWithLabelValues("repo1")
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 	servedCounter, err := cacheServedCounter.GetMetricWithLabelValues("repo1")
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 	missedCounter, err := cacheMissedCounter.GetMetricWithLabelValues("repo1")
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 	cacheErrorCounter, err := cacheServingFailedCounter.GetMetricWithLabelValues("repo1")
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 
 	expectedRequests := testutil.ToFloat64(requestCounter) + 1
 	expectedServed := testutil.ToFloat64(servedCounter)
@@ -170,32 +150,21 @@ func testRequestExistingRepo(t *testing.T) {
 	w := httptest.NewRecorder()
 	pacolocoHandler(w, req)
 	resp := w.Result()
-	if resp.StatusCode != 404 {
-		t.Errorf("404 response expected, got %v", resp.StatusCode)
-	}
+	require.Equal(t, resp.StatusCode, 404)
 
 	actualRequests := testutil.ToFloat64(requestCounter)
 	actualServed := testutil.ToFloat64(servedCounter)
 	actualMissed := testutil.ToFloat64(missedCounter)
 	actualErrorServed := testutil.ToFloat64(cacheErrorCounter)
 
-	if expectedRequests != actualRequests {
-		t.Errorf("Request metric check failed: expected %v, got %v", expectedRequests, actualRequests)
-	}
-	if expectedServed != actualServed {
-		t.Errorf("Served from cache metric check failed: expected %v, got %v", expectedServed, actualServed)
-	}
-	if expectedServed != actualServed {
-		t.Errorf("Cache miss metric check failed: expected %v, got %v", expectedMissed, actualMissed)
-	}
-	if expectedErrorServed != actualErrorServed {
-		t.Errorf("Cache error metric check failed: expected %v, got %v", expectedErrorServed, actualErrorServed)
-	}
+	require.Equal(t, expectedRequests, actualRequests)
+	require.Equal(t, expectedServed, actualServed)
+	require.Equal(t, expectedMissed, actualMissed)
+	require.Equal(t, expectedErrorServed, actualErrorServed)
 
 	// check that db is not cached
-	if _, err := os.Stat(path.Join(testPacolocoDir, "pkgs", "repo1", "test.db")); !os.IsNotExist(err) {
-		t.Error("repo1/test.db should be cached")
-	}
+	_, err = os.Stat(path.Join(testPacolocoDir, "pkgs", "repo1", "test.db"))
+	require.ErrorIs(t, err, os.ErrNotExist, "repo1/test.db should be cached")
 }
 
 func testRequestExistingRepoWithDb(t *testing.T) {
@@ -206,39 +175,25 @@ func testRequestExistingRepoWithDb(t *testing.T) {
 	config.Repos["repo2"] = repo2
 	defer delete(config.Repos, "repo2")
 
-	if err := os.Mkdir(path.Join(mirrorDir, "mirror2"), os.ModePerm); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Mkdir(path.Join(mirrorDir, "mirror2"), os.ModePerm))
 	defer os.RemoveAll(path.Join(mirrorDir, "mirror2"))
 
 	dbAtMirror := path.Join(mirrorDir, "mirror2", "test.db")
 	dbFileContent := "pacoloco/mirror2.db"
 
-	if err := os.WriteFile(dbAtMirror, []byte(dbFileContent), os.ModePerm); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(dbAtMirror, []byte(dbFileContent), os.ModePerm))
 	// Make the mirror file old enough to distinguish it from the subsequent modifications
 	dbModTime := time.Now().Add(-time.Hour)
-	if err := os.Chtimes(dbAtMirror, dbModTime, dbModTime); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Chtimes(dbAtMirror, dbModTime, dbModTime))
 
 	requestCounter, err := cacheRequestsCounter.GetMetricWithLabelValues("repo2")
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 	servedCounter, err := cacheServedCounter.GetMetricWithLabelValues("repo2")
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 	missedCounter, err := cacheMissedCounter.GetMetricWithLabelValues("repo2")
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 	cacheErrorCounter, err := cacheServingFailedCounter.GetMetricWithLabelValues("repo2")
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 
 	expectedRequests := testutil.ToFloat64(requestCounter) + 1
 	expectedServed := testutil.ToFloat64(servedCounter)
@@ -249,25 +204,13 @@ func testRequestExistingRepoWithDb(t *testing.T) {
 	w := httptest.NewRecorder()
 	pacolocoHandler(w, req)
 	resp := w.Result()
-	if resp.StatusCode != 200 {
-		t.Errorf("200 response expected, got %v", resp.StatusCode)
-	}
+	require.Equal(t, resp.StatusCode, 200)
 	content, err := io.ReadAll(w.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(content) != dbFileContent {
-		t.Errorf("Pacoloco cached incorrect db content: %v", string(content))
-	}
-	if resp.ContentLength != int64(len(dbFileContent)) {
-		t.Errorf("Pacoloco returns incorrect length %v", resp.ContentLength)
-	}
+	require.NoError(t, err)
+	require.Equal(t, string(content), dbFileContent)
+	require.Equal(t, resp.ContentLength, int64(len(dbFileContent)))
 	expectedModTime := dbModTime.UTC().Format(http.TimeFormat)
-	if w.Header().Get("Last-Modified") != expectedModTime {
-		t.Errorf("Incorrect Last-Modified received, expected: '%v' got: '%v'",
-			expectedModTime,
-			w.Header().Get("Last-Modified"))
-	}
+	require.Equal(t, expectedModTime, w.Header().Get("Last-Modified"))
 
 	// copying a file to server cache is operation that runs asynchronously to downloading from server
 	// wait a bit until cache operations settle down
@@ -278,41 +221,24 @@ func testRequestExistingRepoWithDb(t *testing.T) {
 	actualMissed := testutil.ToFloat64(missedCounter)
 	actualErrorServed := testutil.ToFloat64(cacheErrorCounter)
 
-	if expectedRequests != actualRequests {
-		t.Errorf("Request metric check failed: expected %v, got %v", expectedRequests, actualRequests)
-	}
-	if expectedServed != actualServed {
-		t.Errorf("Served from cache metric check failed: expected %v, got %v", expectedServed, actualServed)
-	}
-	if expectedMissed != actualMissed {
-		t.Errorf("cache miss metric check failed: expected %v, got %v", expectedMissed, actualMissed)
-	}
-	if expectedErrorServed != actualErrorServed {
-		t.Errorf("Cache error metric check failed: expected %v, got %v", expectedErrorServed, actualErrorServed)
-	}
+	require.Equal(t, expectedRequests, actualRequests)
+	require.Equal(t, expectedServed, actualServed)
+	require.Equal(t, expectedMissed, actualMissed)
+	require.Equal(t, expectedErrorServed, actualErrorServed)
 
 	// check that repo is cached
-	if _, err = os.Stat(path.Join(testPacolocoDir, "pkgs", "repo2")); os.IsNotExist(err) {
-		t.Error("repo2 repo should be cached")
-	}
+	_, err = os.Stat(path.Join(testPacolocoDir, "pkgs", "repo2"))
+	require.NotErrorIs(t, err, os.ErrNotExist, "repo2 repo should be cached")
 	defer os.RemoveAll(path.Join(testPacolocoDir, "pkgs", "repo2"))
 	content, err = os.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo2", "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(content) != dbFileContent {
-		t.Errorf("Got incorrect db content: %v", string(content))
-	}
+	require.NoError(t, err)
+	require.Equal(t, string(content), dbFileContent)
 
 	// Now let's modify the db content, pacoloco should refetch it
 	dbFileContent = "This is a new content"
-	if err := os.WriteFile(dbAtMirror, []byte(dbFileContent), os.ModePerm); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(dbAtMirror, []byte(dbFileContent), os.ModePerm))
 	newDbModTime := time.Now()
-	if err := os.Chtimes(dbAtMirror, newDbModTime, newDbModTime); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Chtimes(dbAtMirror, newDbModTime, newDbModTime))
 
 	expectedRequests = testutil.ToFloat64(requestCounter) + 1
 	expectedServed = testutil.ToFloat64(servedCounter)
@@ -323,16 +249,10 @@ func testRequestExistingRepoWithDb(t *testing.T) {
 	w = httptest.NewRecorder()
 	pacolocoHandler(w, req)
 	resp = w.Result()
-	if resp.StatusCode != 200 {
-		t.Errorf("200 response expected, got %v", resp.StatusCode)
-	}
+	require.Equal(t, resp.StatusCode, 200)
 	content, err = io.ReadAll(w.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(content) != dbFileContent {
-		t.Errorf("Pacoloco cached incorrect db content: %v", string(content))
-	}
+	require.NoError(t, err)
+	require.Equal(t, string(content), dbFileContent)
 
 	// copying a file to server cache is operation that runs asynchronously to downloading from server
 	// wait a bit until cache operations settle down
@@ -343,38 +263,19 @@ func testRequestExistingRepoWithDb(t *testing.T) {
 	actualMissed = testutil.ToFloat64(missedCounter)
 	actualErrorServed = testutil.ToFloat64(cacheErrorCounter)
 
-	if expectedRequests != actualRequests {
-		t.Errorf("Request metric check failed: expected %v, got %v", expectedRequests, actualRequests)
-	}
-	if expectedServed != actualServed {
-		t.Errorf("Served from cache metric check failed: expected %v, got %v", expectedServed, actualServed)
-	}
-	if expectedMissed != actualMissed {
-		t.Errorf("cache miss metric check failed: expected %v, got %v", expectedMissed, actualMissed)
-	}
-	if expectedErrorServed != actualErrorServed {
-		t.Errorf("Cache error metric check failed: expected %v, got %v", expectedErrorServed, actualErrorServed)
-	}
+	require.Equal(t, expectedRequests, actualRequests)
+	require.Equal(t, expectedServed, actualServed)
+	require.Equal(t, expectedMissed, actualMissed)
+	require.Equal(t, expectedErrorServed, actualErrorServed)
 	// check that repo is cached
-	if _, err := os.Stat(path.Join(testPacolocoDir, "pkgs", "repo2")); os.IsNotExist(err) {
-		t.Error("repo2 repo should be cached")
-	}
+	_, err = os.Stat(path.Join(testPacolocoDir, "pkgs", "repo2"))
+	require.NotErrorIs(t, err, os.ErrNotExist, "repo2 repo should be cached")
 	content, err = os.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo2", "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(content) != dbFileContent {
-		t.Errorf("Got incorrect db content: %v", string(content))
-	}
-	if resp.ContentLength != int64(len(dbFileContent)) {
-		t.Errorf("Pacoloco returns incorrect length %v", resp.ContentLength)
-	}
+	require.NoError(t, err)
+	require.Equal(t, string(content), dbFileContent)
+	require.Equal(t, resp.ContentLength, int64(len(dbFileContent)))
 	newExpectedModTime := newDbModTime.UTC().Format(http.TimeFormat)
-	if w.Header().Get("Last-Modified") != newExpectedModTime {
-		t.Errorf("Incorrect Last-Modified received, expected: '%v' got: '%v'",
-			newExpectedModTime,
-			w.Header().Get("Last-Modified"))
-	}
+	require.Equal(t, newExpectedModTime, w.Header().Get("Last-Modified"))
 }
 
 func testRequestPackageFile(t *testing.T) {
@@ -385,50 +286,30 @@ func testRequestPackageFile(t *testing.T) {
 	config.Repos["repo3"] = repo3
 	defer delete(config.Repos, "repo3")
 
-	if err := os.Mkdir(path.Join(mirrorDir, "mirror3"), os.ModePerm); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Mkdir(path.Join(mirrorDir, "mirror3"), os.ModePerm))
 	defer os.RemoveAll(path.Join(mirrorDir, "mirror3"))
 
 	pkgAtMirror := path.Join(mirrorDir, "mirror3", "test-1-any.pkg.tar.zst")
 	pkgFileContent := "a package"
-	if err := os.WriteFile(pkgAtMirror, []byte(pkgFileContent), os.ModePerm); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(pkgAtMirror, []byte(pkgFileContent), os.ModePerm))
 	// Make the mirror file old enough to distinguish it from the subsequent modifications
 	pkgModTime := time.Now().Add(-time.Hour)
-	if err := os.Chtimes(pkgAtMirror, pkgModTime, pkgModTime); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Chtimes(pkgAtMirror, pkgModTime, pkgModTime))
 
 	info, err := os.Stat(pkgAtMirror)
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 	requestCounter, err := cacheRequestsCounter.GetMetricWithLabelValues("repo3")
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 	servedCounter, err := cacheServedCounter.GetMetricWithLabelValues("repo3")
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 	missedCounter, err := cacheMissedCounter.GetMetricWithLabelValues("repo3")
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 	cacheErrorCounter, err := cacheServingFailedCounter.GetMetricWithLabelValues("repo3")
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 	cachePackageCounter, err := cachePackageGauge.GetMetricWithLabelValues("repo3")
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 	cachePackageSize, err := cacheSizeGauge.GetMetricWithLabelValues("repo3")
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 
 	expectedRequests := testutil.ToFloat64(requestCounter) + 1
 	expectedServed := testutil.ToFloat64(servedCounter)
@@ -444,25 +325,13 @@ func testRequestPackageFile(t *testing.T) {
 
 	defer os.RemoveAll(path.Join(testPacolocoDir, "pkgs", "repo3")) // remove cached content
 
-	if resp.StatusCode != 200 {
-		t.Errorf("200 response expected, got %v", resp.StatusCode)
-	}
+	require.Equal(t, resp.StatusCode, 200)
 	content, err := io.ReadAll(w.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(content) != pkgFileContent {
-		t.Errorf("Pacoloco cached incorrect pkg content: %v", string(content))
-	}
-	if resp.ContentLength != int64(len(pkgFileContent)) {
-		t.Errorf("Pacoloco returns incorrect length %v", resp.ContentLength)
-	}
+	require.NoError(t, err)
+	require.Equal(t, string(content), pkgFileContent)
+	require.Equal(t, resp.ContentLength, int64(len(pkgFileContent)))
 	expectedModTime := pkgModTime.UTC().Format(http.TimeFormat)
-	if w.Header().Get("Last-Modified") != expectedModTime {
-		t.Errorf("Incorrect Last-Modified received, expected: '%v' got: '%v'",
-			expectedModTime,
-			w.Header().Get("Last-Modified"))
-	}
+	require.Equal(t, expectedModTime, w.Header().Get("Last-Modified"))
 	// copying a file to server cache is operation that runs asynchronously to downloading from server
 	// wait a bit until cache operations settle down
 	time.Sleep(10 * time.Millisecond)
@@ -474,42 +343,22 @@ func testRequestPackageFile(t *testing.T) {
 	actualPackageNum := testutil.ToFloat64(cachePackageCounter)
 	actualSize := testutil.ToFloat64(cachePackageSize)
 
-	if expectedRequests != actualRequests {
-		t.Errorf("Request metric check failed: expected %v, got %v", expectedRequests, actualRequests)
-	}
-	if expectedServed != actualServed {
-		t.Errorf("Served from cache metric check failed: expected %v, got %v", expectedServed, actualServed)
-	}
-	if expectedServed != actualServed {
-		t.Errorf("Cache miss metric check failed: expected %v, got %v", expectedMissed, actualMissed)
-	}
-	if expectedErrorServed != actualErrorServed {
-		t.Errorf("Cache error metric check failed: expected %v, got %v", expectedErrorServed, actualErrorServed)
-	}
-	if expectedPackageNum != actualPackageNum {
-		t.Errorf("Cache package number metric check failed: expected %v, got %v", expectedPackageNum, actualPackageNum)
-	}
-	if expectedSize != actualSize {
-		t.Errorf("Cache size metric check failed: expected %v, got %v", expectedSize, actualSize)
-	}
+	require.Equal(t, expectedRequests, actualRequests)
+	require.Equal(t, expectedServed, actualServed)
+	require.Equal(t, expectedMissed, actualMissed)
+	require.Equal(t, expectedErrorServed, actualErrorServed)
+	require.Equal(t, expectedPackageNum, actualPackageNum)
+	require.Equal(t, expectedSize, actualSize)
 
 	// check that pkg is cached
 	content, err = os.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo3", "test-1-any.pkg.tar.zst"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(content) != pkgFileContent {
-		t.Errorf("Got incorrect db content: %v", string(content))
-	}
+	require.NoError(t, err)
+	require.Equal(t, string(content), pkgFileContent)
 
 	// Now let's modify the db content, pacoloco should not refetch it
-	if err := os.WriteFile(pkgAtMirror, []byte("This is a new content"), os.ModePerm); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(pkgAtMirror, []byte("This is a new content"), os.ModePerm))
 	newDbModTime := time.Now()
-	if err := os.Chtimes(pkgAtMirror, newDbModTime, newDbModTime); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Chtimes(pkgAtMirror, newDbModTime, newDbModTime))
 
 	expectedRequests = testutil.ToFloat64(requestCounter) + 1
 	expectedServed = testutil.ToFloat64(servedCounter) + 1
@@ -520,33 +369,17 @@ func testRequestPackageFile(t *testing.T) {
 	w = httptest.NewRecorder()
 	pacolocoHandler(w, req)
 	resp = w.Result()
-	if resp.StatusCode != 200 {
-		t.Errorf("200 response expected, got %v", resp.StatusCode)
-	}
+	require.Equal(t, resp.StatusCode, 200)
 	content, err = io.ReadAll(w.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(content) != pkgFileContent {
-		t.Errorf("Pacoloco cached incorrect db content: %v", string(content))
-	}
+	require.NoError(t, err)
+	require.Equal(t, string(content), pkgFileContent)
 
 	// check that repo is cached
 	content, err = os.ReadFile(path.Join(testPacolocoDir, "pkgs", "repo3", "test-1-any.pkg.tar.zst"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(content) != pkgFileContent {
-		t.Errorf("Got incorrect pkg content: %v", string(content))
-	}
-	if resp.ContentLength != int64(len(pkgFileContent)) {
-		t.Errorf("Pacoloco returns incorrect length %v", resp.ContentLength)
-	}
-	if w.Header().Get("Last-Modified") != expectedModTime {
-		t.Errorf("Incorrect Last-Modified received, expected: '%v' got: '%v'",
-			expectedModTime,
-			w.Header().Get("Last-Modified"))
-	}
+	require.NoError(t, err)
+	require.Equal(t, string(content), pkgFileContent)
+	require.Equal(t, resp.ContentLength, int64(len(pkgFileContent)))
+	require.Equal(t, expectedModTime, w.Header().Get("Last-Modified"))
 }
 
 func testRequestDbMultipleTimes(t *testing.T) {
@@ -557,59 +390,38 @@ func testRequestDbMultipleTimes(t *testing.T) {
 	config.Repos["repo4"] = repo4
 	defer delete(config.Repos, "repo4")
 
-	if err := os.Mkdir(path.Join(mirrorDir, "mirror4"), os.ModePerm); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Mkdir(path.Join(mirrorDir, "mirror4"), os.ModePerm))
 	defer os.RemoveAll(path.Join(mirrorDir, "mirror4"))
 
 	dbAtMirror := path.Join(mirrorDir, "mirror4", "test.db")
 	dbFileContent := "pacoloco/mirror4.db"
 
-	if err := os.WriteFile(dbAtMirror, []byte(dbFileContent), os.ModePerm); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(dbAtMirror, []byte(dbFileContent), os.ModePerm))
 
 	req := httptest.NewRequest("GET", pacolocoURL+"/repo/repo4/test.db", nil)
 	w := httptest.NewRecorder()
 	pacolocoHandler(w, req)
 	resp := w.Result()
-	if resp.StatusCode != 200 {
-		t.Errorf("200 response expected, got %v", resp.StatusCode)
-	}
+	require.Equal(t, resp.StatusCode, 200)
 	content, err := io.ReadAll(w.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(content) != dbFileContent {
-		t.Errorf("Pacoloco cached incorrect db content: %v", string(content))
-	}
-	if resp.ContentLength != int64(len(dbFileContent)) {
-		t.Errorf("Pacoloco returns incorrect length %v", resp.ContentLength)
-	}
+	require.NoError(t, err)
+	require.Equal(t, string(content), dbFileContent)
+	require.Equal(t, resp.ContentLength, int64(len(dbFileContent)))
 
 	// check that repo is cached
-	if _, err = os.Stat(path.Join(testPacolocoDir, "pkgs", "repo4")); os.IsNotExist(err) {
-		t.Error("repo4 repo should be cached")
-	}
+	_, err = os.Stat(path.Join(testPacolocoDir, "pkgs", "repo4"))
+	require.NotErrorIs(t, err, os.ErrNotExist, "repo4 repo should be cached")
 	defer os.RemoveAll(path.Join(testPacolocoDir, "pkgs", "repo4"))
 
 	req2 := httptest.NewRequest("GET", pacolocoURL+"/repo/repo4/test.db", nil)
 	w2 := httptest.NewRecorder()
 	pacolocoHandler(w2, req2)
 	resp2 := w2.Result()
-	if resp2.StatusCode != 200 {
-		t.Errorf("200 response expected, got %v", resp2.StatusCode)
-	}
+	require.Equal(t, resp2.StatusCode, 200)
 	content2, err := io.ReadAll(w2.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(content2) != dbFileContent {
-		t.Errorf("Pacoloco cached incorrect db content: %v", string(content2))
-	}
-	if resp2.ContentLength != int64(len(dbFileContent)) {
-		t.Errorf("Pacoloco returns incorrect length %v", resp2.ContentLength)
-	}
+	require.NoError(t, err)
+	require.Equal(t, string(content2), dbFileContent)
+	require.Equal(t, resp2.ContentLength, int64(len(dbFileContent)))
 }
 
 func testFailover(t *testing.T) {
@@ -622,33 +434,21 @@ func testFailover(t *testing.T) {
 	config.Repos["failover"] = failover
 	defer delete(config.Repos, "failover")
 
-	if err := os.Mkdir(path.Join(mirrorDir, "mirror-failover"), os.ModePerm); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.Mkdir(path.Join(mirrorDir, "mirror-failover"), os.ModePerm))
 	defer os.RemoveAll(path.Join(mirrorDir, "mirror-failover"))
 
 	pkgAtMirror := path.Join(mirrorDir, "mirror-failover", "test-1-any.pkg.tar.zst")
 	pkgFileContent := "failover content"
-	if err := os.WriteFile(pkgAtMirror, []byte(pkgFileContent), os.ModePerm); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(pkgAtMirror, []byte(pkgFileContent), os.ModePerm))
 
 	requestCounter, err := cacheRequestsCounter.GetMetricWithLabelValues("failover")
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 	servedCounter, err := cacheServedCounter.GetMetricWithLabelValues("failover")
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 	missedCounter, err := cacheMissedCounter.GetMetricWithLabelValues("failover")
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 	cacheErrorCounter, err := cacheServingFailedCounter.GetMetricWithLabelValues("failover")
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 
 	expectedRequests := testutil.ToFloat64(requestCounter) + 1
 	expectedServed := testutil.ToFloat64(servedCounter)
@@ -662,35 +462,19 @@ func testFailover(t *testing.T) {
 
 	defer os.RemoveAll(path.Join(testPacolocoDir, "pkgs", "failover")) // remove cached content
 
-	if resp.StatusCode != 200 {
-		t.Errorf("200 response expected, got %v", resp.StatusCode)
-	}
+	require.Equal(t, resp.StatusCode, 200)
 	content, err := io.ReadAll(w.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(content) != pkgFileContent {
-		t.Errorf("Pacoloco cached incorrect pkg content: %v", string(content))
-	}
-	if resp.ContentLength != int64(len(pkgFileContent)) {
-		t.Errorf("Pacoloco returns incorrect length %v", resp.ContentLength)
-	}
+	require.NoError(t, err)
+	require.Equal(t, string(content), pkgFileContent)
+	require.Equal(t, resp.ContentLength, int64(len(pkgFileContent)))
 
 	actualRequests := testutil.ToFloat64(requestCounter)
 	actualServed := testutil.ToFloat64(servedCounter)
 	actualMissed := testutil.ToFloat64(missedCounter)
 	actualErrorServed := testutil.ToFloat64(cacheErrorCounter)
 
-	if expectedRequests != actualRequests {
-		t.Errorf("Request metric check failed: expected %v, got %v", expectedRequests, actualRequests)
-	}
-	if expectedServed != actualServed {
-		t.Errorf("Served from cache metric check failed: expected %v, got %v", expectedServed, actualServed)
-	}
-	if expectedServed != actualServed {
-		t.Errorf("Cache miss metric check failed: expected %v, got %v", expectedMissed, actualMissed)
-	}
-	if expectedErrorServed != actualErrorServed {
-		t.Errorf("Cache error metric check failed: expected %v, got %v", expectedErrorServed, actualErrorServed)
-	}
+	require.Equal(t, expectedRequests, actualRequests)
+	require.Equal(t, expectedServed, actualServed)
+	require.Equal(t, expectedMissed, actualMissed)
+	require.Equal(t, expectedErrorServed, actualErrorServed)
 }

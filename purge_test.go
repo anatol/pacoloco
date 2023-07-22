@@ -1,11 +1,12 @@
 package main
 
 import (
-	"log"
 	"os"
 	"path"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )
@@ -14,24 +15,17 @@ func TestPurge(t *testing.T) {
 	purgeFilesAfter := 3600 * 24 * 30 // purge files if they are not accessed for 30 days
 
 	testPacolocoDir, err := os.MkdirTemp(os.TempDir(), "*-pacoloco-repo")
-	if err != nil {
-		log.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer os.RemoveAll(testPacolocoDir) // clean up
 
 	testRepo := path.Join(testPacolocoDir, "pkgs", "purgerepo")
-	if err := os.MkdirAll(testRepo, os.ModePerm); err != nil {
-		log.Fatal(err)
-	}
+
+	require.NoError(t, os.MkdirAll(testRepo, os.ModePerm))
 
 	cachePackageNum, err := cachePackageGauge.GetMetricWithLabelValues("purgerepo")
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 	cachePackageSize, err := cacheSizeGauge.GetMetricWithLabelValues("purgerepo")
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 
 	fileToRemove := path.Join(testRepo, "toremove")
 	fileToStay := path.Join(testRepo, "tostay")
@@ -42,38 +36,26 @@ func TestPurge(t *testing.T) {
 
 	os.Create(fileToRemove)
 	pkgFileContent := "delete me"
-	if err := os.WriteFile(fileToRemove, []byte(pkgFileContent), os.ModePerm); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(fileToRemove, []byte(pkgFileContent), os.ModePerm))
 	os.Chtimes(fileToRemove, thresholdTime.Add(-time.Hour), thresholdTime.Add(-time.Hour))
 
 	os.Create(fileToStay)
 	pkgFileContent = "leave me"
-	if err := os.WriteFile(fileToStay, []byte(pkgFileContent), os.ModePerm); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(fileToStay, []byte(pkgFileContent), os.ModePerm))
 	infoToStay, err := os.Stat(fileToStay)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	os.Chtimes(fileToStay, thresholdTime.Add(time.Hour), thresholdTime.Add(-time.Hour))
 
 	os.Create(fileToBePurgedLater)
 	pkgFileContent = "leave me for now"
-	if err := os.WriteFile(fileToBePurgedLater, []byte(pkgFileContent), os.ModePerm); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(fileToBePurgedLater, []byte(pkgFileContent), os.ModePerm))
 	infoToBePurgedLater, err := os.Stat(fileToBePurgedLater)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	os.Chtimes(fileToBePurgedLater, thresholdTime.Add(time.Hour), thresholdTime.Add(-time.Hour))
 
 	os.Create(fileOutsideRepo)
 	pkgFileContent = "don't touch me"
-	if err := os.WriteFile(fileOutsideRepo, []byte(pkgFileContent), os.ModePerm); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(fileOutsideRepo, []byte(pkgFileContent), os.ModePerm))
 	os.Chtimes(fileOutsideRepo, thresholdTime.Add(-time.Hour), thresholdTime.Add(-time.Hour))
 
 	expectedPackageNum := float64(2)
@@ -81,29 +63,21 @@ func TestPurge(t *testing.T) {
 
 	purgeStaleFiles(testPacolocoDir, purgeFilesAfter, "purgerepo")
 
-	if _, err := os.Stat(fileToRemove); !os.IsNotExist(err) {
-		t.Fail()
-	}
+	_, err = os.Stat(fileToRemove)
+	require.ErrorIs(t, err, os.ErrNotExist)
 
-	if _, err := os.Stat(fileToStay); err != nil {
-		t.Fail()
-	}
-	if _, err := os.Stat(fileToBePurgedLater); err != nil {
-		t.Fail()
-	}
+	_, err = os.Stat(fileToStay)
+	require.NoError(t, err)
+	_, err = os.Stat(fileToBePurgedLater)
+	require.NoError(t, err)
 	// files outside of the pkgs cache should not be touched
-	if _, err := os.Stat(fileOutsideRepo); err != nil {
-		t.Fail()
-	}
+	_, err = os.Stat(fileOutsideRepo)
+	require.NoError(t, err)
 
 	actualPackageNum := testutil.ToFloat64(cachePackageNum)
 	actualSize := testutil.ToFloat64(cachePackageSize)
-	if expectedPackageNum != actualPackageNum {
-		t.Errorf("Cache package number metric check failed: expected %v, got %v", expectedPackageNum, actualPackageNum)
-	}
-	if expectedSize != actualSize {
-		t.Errorf("Cache size metric check failed: expected %v, got %v", expectedSize, actualSize)
-	}
+	require.Equal(t, expectedPackageNum, actualPackageNum)
+	require.Equal(t, expectedSize, actualSize)
 
 	os.Chtimes(fileToBePurgedLater, thresholdTime.Add(-time.Hour), thresholdTime.Add(-time.Hour))
 
@@ -112,22 +86,15 @@ func TestPurge(t *testing.T) {
 
 	purgeStaleFiles(testPacolocoDir, purgeFilesAfter, "purgerepo")
 
-	if _, err := os.Stat(fileToStay); err != nil {
-		t.Fail()
-	}
-	if _, err := os.Stat(fileToBePurgedLater); !os.IsNotExist(err) {
-		t.Fail()
-	}
-	if _, err := os.Stat(fileOutsideRepo); err != nil {
-		t.Fail()
-	}
+	_, err = os.Stat(fileToStay)
+	require.NoError(t, err)
+	_, err = os.Stat(fileToBePurgedLater)
+	require.ErrorIs(t, err, os.ErrNotExist)
+	_, err = os.Stat(fileOutsideRepo)
+	require.NoError(t, err)
 
 	actualPackageNum = testutil.ToFloat64(cachePackageNum)
 	actualSize = testutil.ToFloat64(cachePackageSize)
-	if expectedPackageNum != actualPackageNum {
-		t.Errorf("Cache package number metric check failed: expected %v, got %v", expectedPackageNum, actualPackageNum)
-	}
-	if expectedSize != actualSize {
-		t.Errorf("Cache size metric check failed: expected %v, got %v", expectedSize, actualSize)
-	}
+	require.Equal(t, expectedPackageNum, actualPackageNum)
+	require.Equal(t, expectedSize, actualSize)
 }

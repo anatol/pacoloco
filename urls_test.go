@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/require"
 )
 
 const mirrorlist = `################################################################################
@@ -49,18 +49,11 @@ func TestParseMirrorlist(t *testing.T) {
 		f.Close()
 		f, err = os.Open(tmpMirrorfile)
 	}
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 
 	actualURLs, err := parseMirrorlistURLs(f)
-	if err != nil {
-		t.Error(err)
-	}
-
-	if !cmp.Equal(actualURLs, expectedURLs) {
-		t.Errorf("Got %v, expected %v", actualURLs, expectedURLs)
-	}
+	require.NoError(t, err)
+	require.Equal(t, expectedURLs, actualURLs)
 }
 
 func TestGetCurrentURLs(t *testing.T) {
@@ -74,9 +67,7 @@ func TestGetCurrentURLs(t *testing.T) {
 		f, err = os.Open(tmpMirrorfile)
 	}
 
-	if err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
 
 	config := parseConfig([]byte(`
 cache_dir: ` + temp + `
@@ -91,19 +82,13 @@ repos:
 	archTest := config.Repos["archTest"]
 	urls := archTest.getUrls()
 
-	if !cmp.Equal(urls, expectedURLs) {
-		t.Errorf("Got %v, expected %v", urls, expectedURLs)
-	}
+	require.Equal(t, urls, expectedURLs)
 
 	fileInfo, _ := os.Stat(tmpMirrorfile)
 	expectedModTime := fileInfo.ModTime()
 	gotModTime := archTest.LastModificationTime
-	if gotModTime != expectedModTime {
-		t.Errorf("Got %v mod time, expected %v mod time", gotModTime, expectedModTime)
-	}
+	require.Equal(t, gotModTime, expectedModTime)
 
 	gotCheckTime := archTest.LastMirrorlistCheck
-	if time.Since(gotCheckTime) > 3*time.Second {
-		t.Errorf("Got %v check time, expected %v check time", gotCheckTime, time.Now())
-	}
+	require.LessOrEqual(t, time.Since(gotCheckTime), 3*time.Second)
 }
