@@ -140,5 +140,4 @@ func TestRequestedFile(t *testing.T) {
 	if f.key() != "upstream/extra/os/x86_64/linux-5.19.pkg.tar.zst" {
 		t.Errorf("expected '%s; got '%s", "upstream/extra/os/x86_64/linux-5.19.pkg.tar.zst", f.key())
 	}
-
 }
