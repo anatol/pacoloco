@@ -104,3 +104,41 @@ func TestParallelDownload(t *testing.T) {
 
 	counter.Wait()
 }
+
+func TestRequestedFile(t *testing.T) {
+	path := "/repo/noPath/foobar-3.3.6-7-x86_64.pkg.tar.zst"
+
+	f, err := parseRequestURL(path)
+	if err != nil {
+		t.Error(err)
+	}
+	if f.urlPath() != "/foobar-3.3.6-7-x86_64.pkg.tar.zst" {
+		t.Errorf("expected '%s; got '%s", "/foobar-3.3.6-7-x86_64.pkg.tar.zst", f.urlPath())
+	}
+	if f.key() != "noPath/foobar-3.3.6-7-x86_64.pkg.tar.zst" {
+		t.Errorf("expected '%s; got '%s", "noPath/foobar-3.3.6-7-x86_64.pkg.tar.zst", f.key())
+	}
+	path = "/repo/extened/path/bar-222.pkg.tar.zst"
+	f, err = parseRequestURL(path)
+	if err != nil {
+		t.Error(err)
+	}
+	if f.urlPath() != "/path/bar-222.pkg.tar.zst" {
+		t.Errorf("expected '%s; got '%s", "/path/bar-222.pkg.tar.zst", f.urlPath())
+	}
+	if f.key() != "extened/path/bar-222.pkg.tar.zst" {
+		t.Errorf("expected '%s; got '%s", "extened/path/bar-222.pkg.tar.zst", f.key())
+	}
+	path = "/repo/upstream/extra/os/x86_64/linux-5.19.pkg.tar.zst"
+	f, err = parseRequestURL(path)
+	if err != nil {
+		t.Error(err)
+	}
+	if f.urlPath() != "/extra/os/x86_64/linux-5.19.pkg.tar.zst" {
+		t.Errorf("expected '%s; got '%s", "/extra/os/x86_64/linux-5.19.pkg.tar.zst", f.urlPath())
+	}
+	if f.key() != "upstream/extra/os/x86_64/linux-5.19.pkg.tar.zst" {
+		t.Errorf("expected '%s; got '%s", "upstream/extra/os/x86_64/linux-5.19.pkg.tar.zst", f.key())
+	}
+
+}

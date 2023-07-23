@@ -393,11 +393,7 @@ func (f *RequestedFile) key() string {
 }
 
 func (f *RequestedFile) urlPath() string {
-	if f.pathAtRepo == "" {
-		return "/" + f.fileName
-	} else {
-		return f.pathAtRepo + "/" + f.fileName
-	}
+  return f.pathAtRepo+"/"+f.fileName
 }
 
 // mkCacheDir creates cache directory if one does not exist
