@@ -76,7 +76,7 @@ func (d *Downloader) download() error {
 }
 
 func (d *Downloader) downloadFromUpstream(repoURL string) error {
-	upstreamURL := repoURL + "/" + d.urlPath
+	upstreamURL := repoURL + d.urlPath
 
 	var req *http.Request
 	var err error
@@ -389,15 +389,11 @@ func (f *RequestedFile) getRepo() *Repo {
 
 // key used for downloaders map; each active Downloader is referenced by its key
 func (f *RequestedFile) key() string {
-	return f.repoName + "/" + f.urlPath()
+	return f.repoName + f.urlPath()
 }
 
 func (f *RequestedFile) urlPath() string {
-	if f.pathAtRepo == "" {
-		return f.fileName
-	} else {
-		return f.pathAtRepo + "/" + f.fileName
-	}
+	return f.pathAtRepo + "/" + f.fileName
 }
 
 // mkCacheDir creates cache directory if one does not exist
