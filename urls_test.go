@@ -60,14 +60,7 @@ func TestGetCurrentURLs(t *testing.T) {
 	temp := t.TempDir()
 	tmpMirrorfile := path.Join(temp, "tmpMirrorFile")
 
-	f, err := os.Create(tmpMirrorfile)
-	if err == nil {
-		f.Write([]byte(mirrorlist))
-		f.Close()
-		f, err = os.Open(tmpMirrorfile)
-	}
-
-	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(tmpMirrorfile, []byte(mirrorlist), 0o644))
 
 	config := parseConfig([]byte(`
 cache_dir: ` + temp + `
@@ -80,15 +73,29 @@ repos:
 
 `))
 	archTest := config.Repos["archTest"]
-	urls := archTest.getUrls()
-
-	require.Equal(t, urls, expectedURLs)
+	require.Equal(t, expectedURLs, archTest.getUrls())
 
 	fileInfo, _ := os.Stat(tmpMirrorfile)
-	expectedModTime := fileInfo.ModTime()
-	gotModTime := archTest.LastModificationTime
-	require.Equal(t, gotModTime, expectedModTime)
+	require.Equal(t, fileInfo.ModTime(), archTest.LastModificationTime)
 
 	gotCheckTime := archTest.LastMirrorlistCheck
 	require.LessOrEqual(t, time.Since(gotCheckTime), 3*time.Second)
+}
+
+func TestEmptyMirrorlist(t *testing.T) {
+	temp := t.TempDir()
+	tmpMirrorfile := path.Join(temp, "tmpMirrorFile")
+
+	require.NoError(t, os.WriteFile(tmpMirrorfile, []byte(""), 0o644))
+
+	config := parseConfig([]byte(`
+cache_dir: ` + temp + `
+repos:
+  archTest:
+    mirrorlist: ` + tmpMirrorfile + `
+`))
+	archTest := config.Repos["archTest"]
+	urls, err := archTest.getMirrorlistURLs()
+	require.Error(t, err)
+	require.Nil(t, urls)
 }

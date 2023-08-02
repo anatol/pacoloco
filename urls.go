@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -67,8 +68,12 @@ func (r *Repo) getMirrorlistURLs() ([]string, error) {
 	}
 
 	urls, err := parseMirrorlistURLs(file)
-	if err == nil {
-		r.URLs = urls
+	if err != nil {
+		return nil, err
 	}
-	return urls, err
+	if len(urls) == 0 {
+		return nil, fmt.Errorf("mirrorlist file %s contains no mirrors", r.Mirrorlist)
+	}
+	r.URLs = urls
+	return urls, nil
 }
