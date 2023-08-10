@@ -32,7 +32,7 @@ Then start its systemd service: `# systemctl start pacoloco`.
 Pacoloco can be used with docker.
 
 You can get a prebuilt image from GitHub's [container registry](https://github.com/anatol/pacoloco/pkgs/container/pacoloco) (see also sidebar).
-Currently only amd64 is supported.
+Currently the images are built for `amd64` and ARM (`arm64`, `armv7`) architectures.
 ```sh
 docker pull ghcr.io/anatol/pacoloco
 ```
