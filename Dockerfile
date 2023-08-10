@@ -4,7 +4,9 @@ RUN apk add gcc libc-dev
 
 WORKDIR /build
 
-COPY . .
+COPY go.mod go.sum ./
+RUN go mod download
+COPY *.go ./
 
 RUN go build -ldflags="-s -w"
 
