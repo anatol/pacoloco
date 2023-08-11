@@ -1,4 +1,4 @@
-FROM golang:alpine3.18 as build
+FROM golang:alpine3.18 AS common
 
 RUN apk add gcc libc-dev
 
@@ -8,9 +8,13 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY *.go ./
 
+FROM common AS test
+RUN go test -ldflags="-s -w"
+
+FROM common AS build
 RUN go build -ldflags="-s -w"
 
-FROM alpine:3.18
+FROM alpine:3.18 AS executable
 
 RUN apk add tzdata
 
