@@ -49,13 +49,11 @@ func (d *Downloader) decrementUsage() {
 
 	if val == 0 {
 		downloadersMutex.Lock()
-		// check for 0 one more time in case if a new user appeared right after the previous one
-		if val == 0 {
-			delete(downloaders, d.key)
-			_ = d.bufferFile.Close()
-			_ = os.Remove(d.bufferFile.Name())
-		}
-		downloadersMutex.Unlock()
+		defer downloadersMutex.Unlock()
+
+		delete(downloaders, d.key)
+		_ = d.bufferFile.Close()
+		_ = os.Remove(d.bufferFile.Name())
 	}
 }
 
