@@ -72,7 +72,7 @@ services:
       - /path/to/config/pacoloco.yaml:/etc/pacoloco.yaml
     restart: unless-stopped
 #   to set time zone within the container for cron and log timestamps:
-#    environement:
+#    environment:
 #      - TZ=Europe/Berlin
 ```
 
