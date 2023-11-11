@@ -79,6 +79,14 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      # Spec requires ref to be lowercase, but
+      # user/org/repo name may have mixed case
+      - name: Sanitize image ref
+        uses: ASzc/change-string-case-action@v6
+        id: ref
+        with:
+          string: ${{ env.REGISTRY }}/${{ env.IMAGE }}
+
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v4
@@ -105,7 +113,7 @@ jobs:
           context: .
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ steps.ref.outputs.lowercase }},push-by-digest=true,name-canonical=true,push=true
           # Enable cache to speed up builds
           # Scope is to ensure that images don't overwrite each other's cache
           cache-from: type=gha,scope=${{ env.REGISTRY }}-${{ github.ref_name }}-${{ matrix.platform }}-executable
@@ -142,6 +150,14 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
+      # Spec requires ref to be lowercase, but
+      # user/org/repo name may have mixed case
+      - name: Sanitize image ref
+        uses: ASzc/change-string-case-action@v6
+        id: ref
+        with:
+          string: ${{ env.REGISTRY }}/${{ env.IMAGE }}
+
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v4
@@ -167,8 +183,8 @@ jobs:
         working-directory: /tmp/digests
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.REGISTRY }}/${{ env.IMAGE }}@sha256:%s ' *)
+            $(printf '${{ steps.ref.outputs.lowercase }}@sha256:%s ' *)
 
       - name: Inspect image
         run: |
-          docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ steps.meta.outputs.version }}
+          docker buildx imagetools inspect ${{ steps.ref.outputs.lowercase }}:${{ steps.meta.outputs.version }}
