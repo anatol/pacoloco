@@ -4,6 +4,12 @@ name: Build and push to ghcr.io
 on:
   workflow_dispatch:
   push:
+    paths:
+      - '**.go'
+      - 'go.sum'
+      - 'go.mod'
+      - 'Dockerfile'
+      - '.github/workflows/push.yaml'
 
 env:
   PLATFORMS: |-
