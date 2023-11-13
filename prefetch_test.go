@@ -54,8 +54,7 @@ func TestSetupPrefetch(t *testing.T) {
 		require.NoError(t, err)
 		for res.Next() {
 			var pkg Package
-			err = res.Scan(&pkg.PackageName, &pkg.Version, &pkg.Arch, &pkg.RepoName, &pkg.LastTimeDownloaded, &pkg.LastTimeRepoUpdated)
-			fmt.Print(pkg)
+			err := res.Scan(&pkg.PackageName, &pkg.Version, &pkg.Arch, &pkg.RepoName, &pkg.LastTimeDownloaded, &pkg.LastTimeRepoUpdated)
 			require.NoError(t, err)
 			require.Failf(t, "setupPrefetch shouldn't create entries in %v\n", table)
 		}
@@ -86,8 +85,7 @@ func TestUpdateDBRequestedFile(t *testing.T) {
 		require.NoError(t, err)
 		for res.Next() {
 			var pkg Package
-			err = res.Scan(&pkg.PackageName, &pkg.Version, &pkg.Arch, &pkg.RepoName, &pkg.LastTimeDownloaded, &pkg.LastTimeRepoUpdated)
-			fmt.Print(pkg)
+			err := res.Scan(&pkg.PackageName, &pkg.Version, &pkg.Arch, &pkg.RepoName, &pkg.LastTimeDownloaded, &pkg.LastTimeRepoUpdated)
 			require.NoError(t, err)
 			require.Failf(t, "updateDBRequestedFile shouldn't create entries in %v with bad values\n", table)
 		}
