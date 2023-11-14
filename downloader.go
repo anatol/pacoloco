@@ -234,7 +234,7 @@ func getDownloadReader(f *RequestedFile) (time.Time, io.ReadSeekCloser, error) {
 		return modTime, r, nil
 	}
 
-	// we are done downloading without correctly metadata received, it is an error
+	// we are done downloading without correctly received metadata, it is an error
 	return time.Time{}, nil, d.eventError
 }
 
@@ -278,7 +278,7 @@ func (d *DownloadReader) Seek(offset int64, whence int) (int64, error) {
 	case io.SeekCurrent:
 		d.offset += int(offset)
 	case io.SeekEnd:
-		// note that we cann Seek method only after the metadata is received
+		// note that we can call Seek method only after the metadata is received
 		d.offset = d.downloader.contentLength
 	default:
 		return 0, fmt.Errorf("unknown whence parameter: %v", whence)
