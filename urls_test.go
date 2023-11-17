@@ -44,12 +44,10 @@ func TestParseMirrorlist(t *testing.T) {
 	tmpMirrorfile := path.Join(temp, "tmpMirrorFile")
 
 	f, err := os.Create(tmpMirrorfile)
-	if err == nil {
-		f.Write([]byte(mirrorlist))
-		f.Close()
-		f, err = os.Open(tmpMirrorfile)
-	}
 	require.NoError(t, err)
+	f.Write([]byte(mirrorlist))
+	f.Close()
+	f, err = os.Open(tmpMirrorfile)
 
 	actualURLs, err := parseMirrorlistURLs(f)
 	require.NoError(t, err)

@@ -229,11 +229,14 @@ func prefetchRequest(urlPath string, cachePath string) error {
 		return err
 	}
 	if d != nil {
-		err = d.waitForCompletion()
+		err := d.waitForCompletion()
 		d.decrementUsage()
+		if err != nil {
+			return err
+		}
 	}
 
-	if err == nil && config.Prefetch != nil {
+	if config.Prefetch != nil {
 		if !strings.HasSuffix(f.fileName, ".sig") && !strings.HasSuffix(f.fileName, ".db") {
 			updateDBRequestedFile(f.repoName, f.fileName) // update info for prefetching
 		} else if strings.HasSuffix(f.fileName, ".db") {
@@ -241,7 +244,7 @@ func prefetchRequest(urlPath string, cachePath string) error {
 		}
 	}
 
-	return err
+	return nil
 }
 
 func handleRequest(w http.ResponseWriter, req *http.Request) error {
@@ -278,7 +281,7 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 		}
 	}
 
-	if err == nil && config.Prefetch != nil {
+	if config.Prefetch != nil {
 		if !strings.HasSuffix(f.fileName, ".sig") && !strings.HasSuffix(f.fileName, ".db") {
 			updateDBRequestedFile(f.repoName, f.fileName) // update info for prefetching
 		} else if strings.HasSuffix(f.fileName, ".db") {
@@ -286,5 +289,5 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 		}
 	}
 
-	return err
+	return nil
 }
