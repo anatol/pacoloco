@@ -35,7 +35,7 @@ func (pkg Package) getAllPaths() []string {
 	return pkgPaths
 }
 
-// MirrorDB is a struct which stores all the relevant informations about a requested db file from a client.
+// MirrorDB is a struct which stores all the relevant information about a requested db file from a client.
 // Pacoloco uses this information to replicate the same request when it has to prefetch updated DB files from upstream mirrors
 // I assume the other files to download are on the same path of the DB
 type MirrorDB struct {

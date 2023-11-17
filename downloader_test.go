@@ -106,7 +106,7 @@ func TestRequestedFile(t *testing.T) {
 		input, urlPath, key string
 	}{
 		{"/repo/noPath/foobar-3.3.6-7-x86_64.pkg.tar.zst", "/foobar-3.3.6-7-x86_64.pkg.tar.zst", "noPath/foobar-3.3.6-7-x86_64.pkg.tar.zst"},
-		{"/repo/extened/path/bar-222.pkg.tar.zst", "/path/bar-222.pkg.tar.zst", "extened/path/bar-222.pkg.tar.zst"},
+		{"/repo/extended/path/bar-222.pkg.tar.zst", "/path/bar-222.pkg.tar.zst", "extended/path/bar-222.pkg.tar.zst"},
 		{"/repo/upstream/extra/os/x86_64/linux-5.19.pkg.tar.zst", "/extra/os/x86_64/linux-5.19.pkg.tar.zst", "upstream/extra/os/x86_64/linux-5.19.pkg.tar.zst"},
 	}
 
