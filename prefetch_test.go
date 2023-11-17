@@ -97,12 +97,11 @@ func TestUpdateDBRequestedFile(t *testing.T) {
 	if res.Next() {
 		var got Package
 		now := time.Now()
-		err = res.Scan(&got.PackageName, &got.Version, &got.Arch, &got.RepoName, &got.LastTimeDownloaded, &got.LastTimeRepoUpdated)
+		err := res.Scan(&got.PackageName, &got.Version, &got.Arch, &got.RepoName, &got.LastTimeDownloaded, &got.LastTimeRepoUpdated)
 		require.NoError(t, err)
 
 		want := Package{PackageName: "webkit", Version: "2.3.1-1", Arch: "x86_64", RepoName: "foo", LastTimeDownloaded: &now, LastTimeRepoUpdated: &now}
 		require.True(t, cmp.Equal(got, want, cmpopts.IgnoreFields(Package{}, "LastTimeDownloaded", "LastTimeRepoUpdated")))
-		// require.Equal(t, want, got)
 		dist := want.LastTimeDownloaded.Sub(*got.LastTimeDownloaded)
 		require.Greater(t, dist, -5*time.Second)
 		require.Less(t, dist, 5*time.Second)
@@ -145,7 +144,8 @@ func TestUpdateDBPrefetchedFile(t *testing.T) {
 	for res.Next() {
 		var got Package
 		now := time.Now()
-		err = res.Scan(&got.PackageName, &got.Version, &got.Arch, &got.RepoName, &got.LastTimeDownloaded, &got.LastTimeRepoUpdated)
+		err := res.Scan(&got.PackageName, &got.Version, &got.Arch, &got.RepoName, &got.LastTimeDownloaded, &got.LastTimeRepoUpdated)
+		require.NoError(t, err)
 
 		want := Package{PackageName: "webkit", Version: "2.5.10-4", Arch: "x86_64", RepoName: "foo", LastTimeDownloaded: &now, LastTimeRepoUpdated: &now}
 		require.True(t, cmp.Equal(got, want, cmpopts.IgnoreFields(Package{}, "LastTimeDownloaded", "LastTimeRepoUpdated")))
@@ -156,7 +156,6 @@ func TestUpdateDBPrefetchedFile(t *testing.T) {
 		dist = want.LastTimeRepoUpdated.Sub(*got.LastTimeRepoUpdated)
 		require.Greater(t, dist, -5*time.Second)
 		require.Less(t, dist, 5*time.Second)
-		require.NoError(t, err)
 		counter++
 	}
 	require.Equal(t, 1, counter, "Too many entries")

@@ -52,7 +52,7 @@ func TestCreatePrefetchDB(t *testing.T) {
 		require.NoError(t, err)
 		for res.Next() {
 			var pkg Package
-			err = res.Scan(&pkg.PackageName, &pkg.Version, &pkg.Arch, &pkg.RepoName, &pkg.LastTimeDownloaded, &pkg.LastTimeRepoUpdated)
+			err := res.Scan(&pkg.PackageName, &pkg.Version, &pkg.Arch, &pkg.RepoName, &pkg.LastTimeDownloaded, &pkg.LastTimeRepoUpdated)
 			require.NoError(t, err)
 			require.Failf(t, "createPrefetchDB shouldn't create entries in %v\n", table)
 		}
