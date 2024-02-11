@@ -2,7 +2,7 @@ package main
 
 import (
 	"log"
-	"os/user"
+	"os"
 	"time"
 
 	"github.com/gorhill/cronexpr"
@@ -73,11 +73,7 @@ func parseConfig(raw []byte) *Config {
 		}
 		// validate Mirrorlist config
 		if repo.Mirrorlist != "" && unix.Access(repo.Mirrorlist, unix.R_OK) != nil {
-			u, err := user.Current()
-			if err != nil {
-				log.Fatal(err)
-			}
-			log.Fatalf("mirrorlist file %v for repo %v does not exist or isn't readable for user %v", repo.Mirrorlist, name, u.Username)
+			log.Fatalf("mirrorlist file %v for repo %v does not exist or isn't readable for userid %v", repo.Mirrorlist, name, os.Getuid())
 		}
 	}
 
@@ -86,11 +82,7 @@ func parseConfig(raw []byte) *Config {
 	}
 
 	if unix.Access(result.CacheDir, unix.R_OK|unix.W_OK) != nil {
-		u, err := user.Current()
-		if err != nil {
-			log.Fatal(err)
-		}
-		log.Fatalf("directory %v does not exist or isn't writable for user %v", result.CacheDir, u.Username)
+		log.Fatalf("directory %v does not exist or isn't writable for userid %v", result.CacheDir, os.Getuid())
 	}
 	// validate Prefetch config
 

@@ -60,6 +60,9 @@ Alternatively, you can use docker-compose:
 version: "3.8"
 services:
   pacoloco:
+#   if a specific user id is provided, you have to make sure
+#   the mounted directories have the same user id owner on host
+#   user: 1000:1000
     container_name: pacoloco
 #   to pull the image from github's registry:
     image: ghcr.io/anatol/pacoloco
