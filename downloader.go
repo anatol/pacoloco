@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -62,8 +63,15 @@ func (d *Downloader) download() error {
 		return fmt.Errorf("repo %v has no urls", d.repoName)
 	}
 
+	var proxyURL *url.URL
+	if d.repo.HttpProxy != "" {
+		proxyURL, _ = url.Parse(d.repo.HttpProxy)
+	} else {
+		proxyURL = nil
+	}
+
 	for _, u := range d.repo.getUrls() {
-		err := d.downloadFromUpstream(u)
+		err := d.downloadFromUpstream(u, proxyURL)
 		if err != nil {
 			log.Printf("unable to download file %v: %v", d.key, err)
 			continue // try next mirror
@@ -73,7 +81,7 @@ func (d *Downloader) download() error {
 	return fmt.Errorf("unable to download file %v", d.key)
 }
 
-func (d *Downloader) downloadFromUpstream(repoURL string) error {
+func (d *Downloader) downloadFromUpstream(repoURL string, proxyURL *url.URL) error {
 	upstreamURL := repoURL + d.urlPath
 
 	var req *http.Request
@@ -101,7 +109,16 @@ func (d *Downloader) downloadFromUpstream(repoURL string) error {
 
 	log.Printf("downloading %v", upstreamURL)
 
-	resp, err := http.DefaultClient.Do(req)
+	var client *http.Client
+	if proxyURL != nil {
+		proxy := http.ProxyURL(proxyURL)
+		transport := &http.Transport{Proxy: proxy}
+		client = &http.Client{Transport: transport}
+	} else {
+		client = http.DefaultClient
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
