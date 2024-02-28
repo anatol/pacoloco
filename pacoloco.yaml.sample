@@ -13,6 +13,7 @@ repos:
     mirrorlist: /etc/pacman.d/mirrorlist ## Be careful! Check that pacoloco URL is NOT included in that file!
 ## Local/3rd party repos can be added following the below example:
 #  quarry:
+#    http_proxy: http://bar.company.com:8989 ## Proxy could be enabled per-repo, shadowing the global `http_proxy` (see below)
 #    url: http://pkgbuild.com/~anatolik/quarry/x86_64
 
 # prefetch: ## optional section, add it if you want to enable prefetching
