@@ -22,6 +22,7 @@ type Repo struct {
 	URL                  string    `yaml:"url"`
 	URLs                 []string  `yaml:"urls"`
 	Mirrorlist           string    `yaml:"mirrorlist"`
+	HttpProxy            string    `yaml:"http_proxy"`
 	LastMirrorlistCheck  time.Time `yaml:"-"`
 	LastModificationTime time.Time `yaml:"-"`
 }

@@ -100,6 +100,7 @@ repos:
   quarry:
     url: http://pkgbuild.com/~anatolik/quarry/x86_64
   sublime:
+    http_proxy: http://bar.company.com:8989 # Proxy could be enabled per-repo, shadowing the global `http_proxy` (see below)
     url: https://download.sublimetext.com/arch/stable/x86_64
   archlinux-reflector:
     mirrorlist: /etc/pacman.d/reflector_mirrorlist # Be careful! Check that pacoloco URL is NOT included in that file!
@@ -116,7 +117,7 @@ prefetch: # optional section, add it if you want to enable prefetching
 * `purge_files_after` specifies inactivity duration (in seconds) after which the file should be removed from the cache. This functionality uses unix "AccessTime" field to find out inactive files. Default value is `0` that means never run the purging.
 * `port` is the server port.
 * `download_timeout` is a timeout (in seconds) for internet->cache downloads. If a remote server gets slow and file download takes longer than this will be terminated. Default value is `0` that means no timeout.
-* `repos` is a list of repositories to mirror. Each repo needs `name` and url of its Arch mirrors. Note that url can be specified either with `url` or `urls` properties, one and only one can be used for each repo configuration.
+* `repos` is a list of repositories to mirror. Each repo needs `name` and url of its Arch mirrors. Note that url can be specified either with `url` or `urls` properties, one and only one can be used for each repo configuration. Each repo could have its own `http_proxy`, which would shadow the global `http_proxy` (see below).
 * `http_proxy` is only to be used if you have pacoloco running behind a proxy
 * `user_agent` user agent used to fetch the files from repositories. Default value is `Pacoloco/1.2`.
 * The `prefetch` section allows to enable packages prefetching. Comment it out to disable it.
