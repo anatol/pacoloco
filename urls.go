@@ -44,6 +44,9 @@ func parseMirrorlistURLs(file *os.File) ([]string, error) {
 }
 
 func (r *Repo) getMirrorlistURLs() ([]string, error) {
+	r.MirrorlistMutex.Lock()
+	defer r.MirrorlistMutex.Unlock()
+
 	if time.Since(r.LastMirrorlistCheck) < 5*time.Second {
 		return r.URLs, nil
 	}
