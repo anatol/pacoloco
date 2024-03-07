@@ -59,7 +59,8 @@ func (d *Downloader) decrementUsage() {
 }
 
 func (d *Downloader) download() error {
-	if len(d.repo.getUrls()) == 0 {
+	urls := d.repo.getUrls()
+	if len(urls) == 0 {
 		return fmt.Errorf("repo %v has no urls", d.repoName)
 	}
 
@@ -70,7 +71,7 @@ func (d *Downloader) download() error {
 		proxyURL = nil
 	}
 
-	for _, u := range d.repo.getUrls() {
+	for _, u := range urls {
 		err := d.downloadFromUpstream(u, proxyURL)
 		if err != nil {
 			log.Printf("unable to download file %v: %v", d.key, err)
