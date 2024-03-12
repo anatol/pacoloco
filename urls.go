@@ -56,7 +56,9 @@ func (r *Repo) getMirrorlistURLs() ([]string, error) {
 		return r.URLs, nil
 	}
 
-	r.LastMirrorlistCheck = time.Now()
+	defer func() {
+		r.LastMirrorlistCheck = time.Now()
+	}()
 
 	fileInfo, err := os.Stat(r.Mirrorlist)
 	if err != nil {
