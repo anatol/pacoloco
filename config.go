@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/gorhill/cronexpr"
@@ -19,12 +20,13 @@ const (
 )
 
 type Repo struct {
-	URL                  string    `yaml:"url"`
-	URLs                 []string  `yaml:"urls"`
-	Mirrorlist           string    `yaml:"mirrorlist"`
-	HttpProxy            string    `yaml:"http_proxy"`
-	LastMirrorlistCheck  time.Time `yaml:"-"`
-	LastModificationTime time.Time `yaml:"-"`
+	URL                  string     `yaml:"url"`
+	URLs                 []string   `yaml:"urls"`
+	Mirrorlist           string     `yaml:"mirrorlist"`
+	HttpProxy            string     `yaml:"http_proxy"`
+	LastMirrorlistCheck  time.Time  `yaml:"-"`
+	MirrorlistMutex      sync.Mutex `yaml:"-"`
+	LastModificationTime time.Time  `yaml:"-"`
 }
 
 type RefreshPeriod struct {
