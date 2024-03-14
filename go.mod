@@ -6,10 +6,10 @@ require (
 	github.com/djherbis/times v1.6.0
 	github.com/google/go-cmp v0.6.0
 	github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75
-	github.com/klauspost/compress v1.17.6
-	github.com/prometheus/client_golang v1.18.0
-	github.com/stretchr/testify v1.8.4
-	golang.org/x/sys v0.17.0
+	github.com/klauspost/compress v1.17.7
+	github.com/prometheus/client_golang v1.19.0
+	github.com/stretchr/testify v1.9.0
+	golang.org/x/sys v0.18.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/sqlite v1.5.5
 	gorm.io/gorm v1.25.7
@@ -25,7 +25,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.22 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_model v0.6.0 // indirect
-	github.com/prometheus/common v0.47.0 // indirect
-	github.com/prometheus/procfs v0.12.0 // indirect
-	google.golang.org/protobuf v1.32.0 // indirect
+	github.com/prometheus/common v0.50.0 // indirect
+	github.com/prometheus/procfs v0.13.0 // indirect
+	google.golang.org/protobuf v1.33.0 // indirect
 )
