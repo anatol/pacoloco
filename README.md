@@ -37,6 +37,7 @@ Optionally you can build the binary from sources using `go build` command.
 
 ## Configure
 
+### pacoloco.conf
 The server configuration is located at `/etc/pacoloco.yaml`. Here is an example how the config file looks like:
 
 ```yaml
@@ -79,7 +80,8 @@ prefetch: # optional section, add it if you want to enable prefetching
 With the example configured above `http://YOURSERVER:9129/repo/archlinux` looks exactly like an Arch pacman mirror.
 For example a request to `http://YOURSERVER:9129/repo/archlinux/core/os/x86_64/openssh-8.2p1-3-x86_64.pkg.tar.zst` will be served with file content from `http://mirror.lty.me/archlinux/core/os/x86_64/openssh-8.2p1-3-x86_64.pkg.tar.zst`
 
-Once the pacoloco server is up and running it is time to configure the user host. Modify user's `/etc/pacman.conf` with
+### pacman.conf
+Once the pacoloco server is up and running, it is time to configure *pacman* to use *pacoloco*. Modify `/etc/pacman.conf` by changing the server it uses as mirror.
 
 ```conf
 [core]
@@ -100,11 +102,19 @@ Server = http://yourpacoloco:9129/repo/sublime
 
 And `/etc/pacman.d/mirrorlist` with
 
-```yaml
+```conf
 Server = http://yourpacoloco:9129/repo/archlinux/$repo/os/$arch
 ```
 
-That's it. Since now pacman requests will be proxied through our pacoloco server.
+#### CacheServer option
+Since *pacman* **6.1**, it is also possible to use the *CacheServer* option. This time, you can keep your current mirror with the Server option, but instead, add a *CacheServer* option pointing at *pacoloco*, like that:
+
+```conf
+Server = https://youroriginalmirror/$repo/os/$arch
+CacheServer = http://yourpacoloco:9129/repo/archlinux/$repo/os/$arch
+```
+
+That's it. From now on, pacman requests will be proxied through our pacoloco server.
 
 ## Handling multiple architectures
 
