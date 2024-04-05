@@ -114,6 +114,8 @@ Server = https://youroriginalmirror/$repo/os/$arch
 CacheServer = http://yourpacoloco:9129/repo/archlinux/$repo/os/$arch
 ```
 
+Please refer to *pacman.conf* man page to learn more about this option.
+
 That's it. From now on, pacman requests will be proxied through our pacoloco server.
 
 ## Handling multiple architectures
