@@ -106,13 +106,20 @@ And `/etc/pacman.d/mirrorlist` with
 Server = http://yourpacoloco:9129/repo/archlinux/$repo/os/$arch
 ```
 
-#### CacheServer option
-Since *pacman* **6.1**, it is also possible to use the *CacheServer* option. This time, you can keep your current mirror with the Server option, but instead, add a *CacheServer* option pointing at *pacoloco*, like that:
+### Checklist
+Run `pacman -Syu` on your client machine and check everything works smoothly. Also, check *pacoloco*'s log (with `journalctl -u pacoloco -e`), to see if the packages are downloaded and served as expected. You should see the same packages that have been upgraded with the previous pacman command run.
+
+### CacheServer option
+Since *pacman* **6.1**, it is also possible to use the *CacheServer* option. This allows *pacman* to fall-back on using the (main) mirror(s), if *pacoloco* is not available, like when your are not on your LAN, for example.
+
+This time, you can keep your current mirror with the Server option, but instead, add a *CacheServer* option pointing at *pacoloco*, like that:
 
 ```conf
 Server = https://youroriginalmirror/$repo/os/$arch
 CacheServer = http://yourpacoloco:9129/repo/archlinux/$repo/os/$arch
 ```
+
+You still need to specify a mirror in *pacoloco* config file, of course. It's better to use the same one.
 
 Please refer to *pacman.conf* man page to learn more about this option.
 
