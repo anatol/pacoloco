@@ -24,7 +24,7 @@ You can think of pacoloco as a lazy Arch mirror.
 
 ### Arch systems
 
-Install [pacoloco package](https://archlinux.org/packages/community/x86_64/pacoloco/) from the official Arch repository.
+Install [pacoloco package](https://archlinux.org/packages/extra/x86_64/pacoloco/) from the official Arch repository.
 Then start its systemd service: `# systemctl start pacoloco`.
 
 ### Docker
@@ -134,9 +134,6 @@ Once the pacoloco server is up and running it is time to configure the user host
 Include = /etc/pacman.d/mirrorlist
 
 [extra]
-Include = /etc/pacman.d/mirrorlist
-
-[community]
 Include = /etc/pacman.d/mirrorlist
 
 [quarry]
