@@ -253,6 +253,12 @@ func getDownloadReader(f *RequestedFile) (time.Time, io.ReadSeekCloser, error) {
 	}
 
 	// we are done downloading without correctly received metadata, it is an error
+	// end 'd' properly
+	d.decrementUsage()
+	// if cache exists, use that
+	if f.cachedFileExists() {
+		return time.Time{}, nil, nil
+	}
 	return time.Time{}, nil, d.eventError
 }
 
