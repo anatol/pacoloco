@@ -124,11 +124,14 @@ jobs:
           mkdir -p /tmp/digests
           digest="${{ steps.build.outputs.digest }}"
           touch "/tmp/digests/${digest#sha256:}"
+          PLATFORM=${{ matrix.platform }}
+          # Replace slashes in platform name with dashes
+          echo "PLATFORM_ARTIFACT=${PLATFORM//\//-}" >> $GITHUB_ENV
 
       - name: Upload digest
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: digests
+          name: digests-${{ env.PLATFORM_ARTIFACT }}
           path: /tmp/digests/*
           if-no-files-found: error
           retention-days: 1
@@ -141,9 +144,10 @@ jobs:
 
     steps:
       - name: Download digests
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
-          name: digests
+          pattern: digests-*
+          merge-multiple: true
           path: /tmp/digests
 
       - name: Set up Docker Buildx
