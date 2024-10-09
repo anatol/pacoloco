@@ -44,7 +44,7 @@ func parseMirrorlistURLs(file *os.File) ([]string, error) {
 }
 
 func (r *Repo) getMirrorlistURLs() ([]string, error) {
-	const MirrorlistCheckInterval = 5*time.Second
+	const MirrorlistCheckInterval = 5 * time.Second
 
 	if time.Since(r.LastMirrorlistCheck) < MirrorlistCheckInterval {
 		return r.URLs, nil
