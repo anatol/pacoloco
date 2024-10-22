@@ -1,4 +1,5 @@
 # cache_dir: /var/cache/pacoloco
+# address:
 # port: 9129
 download_timeout: 3600 ## downloads will timeout if not completed after 3600 sec, 0 to disable timeout
 purge_files_after: 2592000 ## purge file after 30 days

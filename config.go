@@ -12,6 +12,7 @@ import (
 )
 
 const (
+	DefaultAddress       = ""
 	DefaultPort          = 9129
 	DefaultCacheDir      = "/var/cache/pacoloco"
 	DefaultTTLUnaccessed = 30
@@ -37,6 +38,7 @@ type RefreshPeriod struct {
 
 type Config struct {
 	CacheDir        string           `yaml:"cache_dir"`
+	Address         string           `yaml:"address"`
 	Port            int              `yaml:"port"`
 	Repos           map[string]*Repo `yaml:"repos,omitempty"`
 	PurgeFilesAfter int              `yaml:"purge_files_after"`
@@ -52,6 +54,7 @@ var config *Config
 func parseConfig(raw []byte) *Config {
 	result := Config{
 		CacheDir: DefaultCacheDir,
+		Address:  DefaultAddress,
 		Port:     DefaultPort,
 		Prefetch: nil,
 	}

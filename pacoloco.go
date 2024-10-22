@@ -137,8 +137,8 @@ func main() {
 		config.UserAgent = "Pacoloco/1.2"
 	}
 
-	listenAddr := fmt.Sprintf(":%d", config.Port)
-	log.Println("Starting server at port", config.Port)
+	listenAddr := fmt.Sprintf("%s:%d", config.Address, config.Port)
+	log.Printf("Starting server at address %s:%d", config.Address, config.Port)
 	// The request path looks like '/repo/$reponame/$pathatmirror'
 	http.HandleFunc("/repo/", pacolocoHandler)
 	// Expose prometheus metrics
