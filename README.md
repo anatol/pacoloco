@@ -88,6 +88,7 @@ Optionally you can build the binary from sources using `go build` command.
 The server configuration is located at `/etc/pacoloco.yaml`. Here is an example how the config file looks like:
 
 ```yaml
+address: 127.0.0.1
 port: 9129
 cache_dir: /var/cache/pacoloco
 purge_files_after: 360000 # 360000 seconds or 100 hours, 0 to disable
@@ -115,6 +116,7 @@ prefetch: # optional section, add it if you want to enable prefetching
 
 * `cache_dir` is the cache directory, this location needs to read/writable by the server process.
 * `purge_files_after` specifies inactivity duration (in seconds) after which the file should be removed from the cache. This functionality uses unix "AccessTime" field to find out inactive files. Default value is `0` that means never run the purging.
+* `address` is the servers listening address. When left empty, the server will start opening a listener on all available addresses. When any of the IPs is a public IP, it will make pacoloco available to the internet.
 * `port` is the server port.
 * `download_timeout` is a timeout (in seconds) for internet->cache downloads. If a remote server gets slow and file download takes longer than this will be terminated. Default value is `0` that means no timeout.
 * `repos` is a list of repositories to mirror. Each repo needs `name` and url of its Arch mirrors. Note that url can be specified either with `url` or `urls` properties, one and only one can be used for each repo configuration. Each repo could have its own `http_proxy`, which would shadow the global `http_proxy` (see below).
