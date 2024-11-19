@@ -172,10 +172,12 @@ func (d *Downloader) downloadFromUpstream(repoURL string, proxyURL *url.URL) err
 		return err
 	}
 
-	if !d.modificationTime.IsZero() {
-		if err := os.Chtimes(d.outputFileName, time.Now(), d.modificationTime); err != nil {
-			return err
-		}
+	modTime := d.modificationTime
+	if modTime.IsZero() {
+		modTime = time.Now()
+	}
+	if err := os.Chtimes(d.outputFileName, time.Now(), modTime); err != nil {
+		return err
 	}
 
 	cacheSizeGauge.WithLabelValues(d.repoName).Add(float64(d.contentLength))
