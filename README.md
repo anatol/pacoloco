@@ -115,16 +115,19 @@ Include = /etc/pacman.d/mirrorlist
 Include = /etc/pacman.d/mirrorlist
 
 [quarry]
-Server = http://yourpacoloco:9129/repo/quarry
+CacheServer = http://yourpacoloco:9129/repo/quarry
+Server = http://pkgbuild.com/~anatolik/quarry/x86_64
 
 [sublime-text]
-Server = http://yourpacoloco:9129/repo/sublime
+CacheServer = http://yourpacoloco:9129/repo/sublime
+Server = https://download.sublimetext.com/arch/stable/x86_64
 ```
 
 And `/etc/pacman.d/mirrorlist` with
 
 ```yaml
-Server = http://yourpacoloco:9129/repo/archlinux/$repo/os/$arch
+CacheServer = http://yourpacoloco:9129/repo/archlinux/$repo/os/$arch
+Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch
 ```
 
 That's it. Since now pacman requests will be proxied through our pacoloco server.
