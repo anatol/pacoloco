@@ -88,7 +88,6 @@ Optionally you can build the binary from sources using `go build` command.
 The server configuration is located at `/etc/pacoloco.yaml`. Here is an example how the config file looks like:
 
 ```yaml
-address: 127.0.0.1
 port: 9129
 cache_dir: /var/cache/pacoloco
 purge_files_after: 360000 # 360000 seconds or 100 hours, 0 to disable
