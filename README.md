@@ -29,55 +29,7 @@ Then start its systemd service: `# systemctl start pacoloco`.
 
 ### Docker
 
-Pacoloco can be used with docker.
-
-You can get a prebuilt image from GitHub's [container registry](https://github.com/anatol/pacoloco/pkgs/container/pacoloco) (see also sidebar).
-Currently the images are built for `amd64` and ARM (`arm64`, `armv7`) architectures.
-```sh
-docker pull ghcr.io/anatol/pacoloco
-```
-Available tags are: `latest` = git master and any git tags.
-
-
-You can also build it yourself:
-```sh
-$ git clone https://github.com/anatol/pacoloco && cd pacoloco
-$ docker build -t ghcr.io/anatol/pacoloco .
-```
-
-Run it like this:
-```sh
-$ docker run -p 9129:9129 \
-    -v /path/to/config/pacoloco.yaml:/etc/pacoloco.yaml \
-    -v /path/to/cache:/var/cache/pacoloco \
-    ghcr.io/anatol/pacoloco
-```
-You need to provide paths or volumes to store application data.
-
-Alternatively, you can use docker-compose:
-```yaml
----
-version: "3.8"
-services:
-  pacoloco:
-#   if a specific user id is provided, you have to make sure
-#   the mounted directories have the same user id owner on host
-#   user: 1000:1000
-    container_name: pacoloco
-#   to pull the image from github's registry:
-    image: ghcr.io/anatol/pacoloco
-#   or replace it for for self-building with:
-#    build: https://github.com/anatol/pacoloco.git
-    ports:
-      - "9129:9129"
-    volumes:
-      - /path/to/cache:/var/cache/pacoloco
-      - /path/to/config/pacoloco.yaml:/etc/pacoloco.yaml
-    restart: unless-stopped
-#   to set time zone within the container for cron and log timestamps:
-#    environment:
-#      - TZ=Europe/Berlin
-```
+Pacoloco can be used with docker. See the docker.md file.
 
 ## Build from sources
 
@@ -85,6 +37,7 @@ Optionally you can build the binary from sources using `go build` command.
 
 ## Configure
 
+### pacoloco.conf
 The server configuration is located at `/etc/pacoloco.yaml`. Here is an example how the config file looks like:
 
 ```yaml
@@ -128,7 +81,8 @@ prefetch: # optional section, add it if you want to enable prefetching
 With the example configured above `http://YOURSERVER:9129/repo/archlinux` looks exactly like an Arch pacman mirror.
 For example a request to `http://YOURSERVER:9129/repo/archlinux/core/os/x86_64/openssh-8.2p1-3-x86_64.pkg.tar.zst` will be served with file content from `http://mirror.lty.me/archlinux/core/os/x86_64/openssh-8.2p1-3-x86_64.pkg.tar.zst`
 
-Once the pacoloco server is up and running it is time to configure the user host. Modify user's `/etc/pacman.conf` with
+### pacman.conf
+Once the pacoloco server is up and running, it is time to configure *pacman* to use *pacoloco*. Modify `/etc/pacman.conf` by changing the server it uses as mirror.
 
 ```conf
 [core]
@@ -146,11 +100,28 @@ Server = http://yourpacoloco:9129/repo/sublime
 
 And `/etc/pacman.d/mirrorlist` with
 
-```yaml
+```conf
 Server = http://yourpacoloco:9129/repo/archlinux/$repo/os/$arch
 ```
 
-That's it. Since now pacman requests will be proxied through our pacoloco server.
+### Checklist
+Run `pacman -Syu` on your client machine and check everything works smoothly. Also, check *pacoloco*'s log (with `journalctl -u pacoloco -e`), to see if the packages are downloaded and served as expected. You should see the same packages that have been upgraded with the previous pacman command run.
+
+### CacheServer option
+Since *pacman* **6.1**, it is also possible to use the *CacheServer* option. This allows *pacman* to fall-back on using the (main) mirror(s), if *pacoloco* is not available, like when your are not on your LAN, for example.
+
+This time, you can keep your current mirror with the Server option, but instead, add a *CacheServer* option pointing at *pacoloco*, like that:
+
+```conf
+Server = https://youroriginalmirror/$repo/os/$arch
+CacheServer = http://yourpacoloco:9129/repo/archlinux/$repo/os/$arch
+```
+
+You still need to specify a mirror in *pacoloco* config file, of course. It's better to use the same one.
+
+Please refer to *pacman.conf* man page to learn more about this option.
+
+That's it. From now on, pacman requests will be proxied through our pacoloco server.
 
 ## Handling multiple architectures
 
