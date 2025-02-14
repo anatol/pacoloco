@@ -12,6 +12,7 @@ import (
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/stretchr/testify/require"
+	"github.com/ulikunitz/xz"
 )
 
 // https://gist.github.com/maximilien/328c9ac19ab0a158a8df  slightly modified to create a fake package
@@ -190,7 +191,7 @@ func addFileToTarWriter(pkgName string, content string, tarWriter *tar.Writer) e
 
 // Uncompresses a gzip file
 func TestUncompressGZ(t *testing.T) {
-	err := uncompressGZ("nope", "nope")
+	err := uncompress("nope", "nope")
 	tmpDir := testSetupHelper(t)
 	require.Error(t, err)
 	filePath := path.Join(tmpDir, "test.gz")
@@ -202,18 +203,38 @@ func TestUncompressGZ(t *testing.T) {
 	_, err = io.Copy(writer, reader)
 	require.NoError(t, err)
 	writer.Close()
-	require.NoError(t, uncompressGZ(filePath, filePath+".uncompressed"))
+	require.NoError(t, uncompress(filePath, filePath+".uncompressed"))
 	byteStr, err := os.ReadFile(filePath + ".uncompressed")
 	require.NoError(t, err)
 	require.Equal(t, string(byteStr), testString)
 }
 
+func TestUncompressXZ(t *testing.T) {
+	err := uncompress("nope", "nope")
+	tmpDir := testSetupHelper(t)
+	require.Error(t, err)
+	filePath := path.Join(tmpDir, "test.xz")
+	testString := ``
+	xzfile, err := os.Create(filePath)
+	require.NoError(t, err)
+	writer, err := xz.NewWriter(xzfile)
+	require.NoError(t, err)
+	reader := strings.NewReader(testString)
+	_, err = io.Copy(writer, reader)
+	require.NoError(t, err)
+	writer.Close()
+	require.NoError(t, uncompress(filePath, filePath+".uncompressed"))
+	byteStr, err := os.ReadFile(filePath + ".uncompressed")
+	require.Equal(t, string(byteStr), testString)
+	require.NoError(t, err)
+}
+
 func TestUncompressZSTD(t *testing.T) {
-	err := uncompressZSTD("nope", "nope")
+	err := uncompress("nope", "nope")
 	tmpDir := testSetupHelper(t)
 	require.Error(t, err)
 	filePath := path.Join(tmpDir, "test.zstd")
-	testString := ``
+	testString := `foobar`
 	zstdfile, err := os.Create(filePath)
 	require.NoError(t, err)
 	writer, err := zstd.NewWriter(zstdfile)
@@ -222,7 +243,7 @@ func TestUncompressZSTD(t *testing.T) {
 	_, err = io.Copy(writer, reader)
 	require.NoError(t, err)
 	writer.Close()
-	require.NoError(t, uncompressZSTD(filePath, filePath+".uncompressed"))
+	require.NoError(t, uncompress(filePath, filePath+".uncompressed"))
 	byteStr, err := os.ReadFile(filePath + ".uncompressed")
 	require.Equal(t, string(byteStr), testString)
 	require.NoError(t, err)
@@ -234,8 +255,7 @@ func TestUncompressZSTDBomb(t *testing.T) {
 	}
 	tmpDir := testSetupHelper(t)
 	filePath := path.Join(tmpDir, "test.zstd")
-	var zstdBombSize int64
-	zstdBombSize = 120 * 1024 * 1024
+	var zstdBombSize int64 = 120 * 1024 * 1024
 	zstdfile, err := os.Create(filePath)
 	require.NoError(t, err)
 	zero, err := os.Open("/dev/zero")
@@ -248,7 +268,7 @@ func TestUncompressZSTDBomb(t *testing.T) {
 	_, err = io.Copy(writer, reader)
 	require.NoError(t, err)
 	writer.Close()
-	err = uncompressGZ(filePath, filePath+".uncompressed")
+	err = uncompress(filePath, filePath+".uncompressed")
 	if err != nil {
 		// It is a success if it happens
 		return
@@ -278,7 +298,7 @@ func TestExtractFilenamesFromTar(t *testing.T) {
 	// now create a valid db file
 	filePath = path.Join(tmpDir, "core.db")
 	createDbTarball(t, filePath, getTestTarDB())
-	require.NoError(t, uncompressGZ(filePath, filePath+".uncompressed"))
+	require.NoError(t, uncompress(filePath, filePath+".uncompressed"))
 	got, err := extractFilenamesFromTar(filePath + ".uncompressed")
 	require.NoError(t, err)
 	want := []string{"acl-2.3.1-1-x86_64.pkg.tar.zst", "attr-2.5.1-1-x86_64.pkg.tar.zst"}

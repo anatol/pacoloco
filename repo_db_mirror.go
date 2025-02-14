@@ -3,7 +3,6 @@ package main
 import (
 	"archive/tar"
 	"bufio"
-	"compress/gzip"
 	"fmt"
 	"io"
 	"log"
@@ -11,71 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-
-	"github.com/klauspost/compress/zstd"
 )
-
-// Uncompresses a gzip file
-func uncompressGZ(filePath string, targetFile string) error {
-	gzipfile, err := os.Open(filePath)
-	if err != nil {
-		log.Printf("error: %v\n", err)
-		return err
-	}
-	reader, err := gzip.NewReader(gzipfile)
-	if err != nil {
-		log.Printf("error: %v\n", err)
-		return err
-	}
-	limitedReader := io.LimitReader(reader, 100*1024*1024) // Limits the size of the extracted file up to 100MB, so far community db is around 20MB
-	if err != nil {
-		log.Printf("error: %v\n", err)
-		return err
-	}
-	defer reader.Close()
-	writer, err := os.Create(targetFile)
-	if err != nil {
-		log.Printf("error: %v\n", err)
-		return err
-	}
-	defer writer.Close()
-	if _, err = io.Copy(writer, limitedReader); err != nil {
-		log.Printf("error: %v\n", err)
-		return err
-	}
-	return nil
-}
-
-// Uncompress a zstd file
-func uncompressZSTD(filePath string, targetFile string) error {
-	zstdfile, err := os.Open(filePath)
-	if err != nil {
-		log.Printf("error: %v\n", err)
-		return err
-	}
-	reader, err := zstd.NewReader(zstdfile)
-	if err != nil {
-		log.Printf("error: %v\n", err)
-		return err
-	}
-	limitedReader := io.LimitReader(reader, 100*1024*1024) // Limits the size of the extracted file up to 100MB, so far community db is around 20MB
-	if err != nil {
-		log.Printf("error: %v\n", err)
-		return err
-	}
-	defer reader.Close()
-	writer, err := os.Create(targetFile)
-	if err != nil {
-		log.Printf("error: %v\n", err)
-		return err
-	}
-	defer writer.Close()
-	if _, err = io.Copy(writer, limitedReader); err != nil {
-		log.Printf("error: %v\n", err)
-		return err
-	}
-	return nil
-}
 
 func extractFilenamesFromTar(filePath string) ([]string, error) {
 	f, err := os.Open(filePath)
@@ -158,11 +93,8 @@ func downloadAndParseDb(mirror MirrorDB) error {
 	}
 	log.Printf("Extracting %v...", filePath)
 	// the db file exists and have been downloaded. Now it is time to decompress it
-	if err := uncompressGZ(filePath, filePath+".tar"); err != nil {
-		log.Printf("Gzip extraction failed with error '%v', attempting zstd extraction...", err)
-		if err := uncompressZSTD(filePath, filePath+".tar"); err != nil {
-			return err
-		}
+	if err := uncompress(filePath, filePath+".tar"); err != nil {
+		return err
 	}
 	// delete the original file
 	if err := os.Remove(filePath); err != nil {
