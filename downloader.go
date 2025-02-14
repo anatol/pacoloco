@@ -75,9 +75,9 @@ func (d *Downloader) download() error {
 		err := d.downloadFromUpstream(u, proxyURL)
 		if err != nil {
 			if strings.HasSuffix(u, "/core.db.sig") || strings.HasSuffix(u, "/extra.db.sig") {
-		        	// Archlinux dbs are not signed as of Nov 2024
-        			// https://wiki.archlinux.org/title/DeveloperWiki:Repo_DB_Signing
-        			return nil
+				// Archlinux dbs are not signed as of Nov 2024
+				// https://wiki.archlinux.org/title/DeveloperWiki:Repo_DB_Signing
+				return nil
 			}
 			log.Printf("unable to download file %v: %v", d.key, err)
 			continue // try next mirror
