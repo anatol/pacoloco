@@ -27,34 +27,48 @@ You can think of pacoloco as a lazy Arch mirror.
 Install [pacoloco package](https://archlinux.org/packages/extra/x86_64/pacoloco/) from the official Arch repository.
 Then start its systemd service: `# systemctl start pacoloco`.
 
+### Alpine Linux systems
+
+Install the [pacoloco package](https://pkgs.alpinelinux.org/packages?name=pacoloco&branch=edge&repo=&arch=&origin=&flagged=&maintainer=)
+from the community repository.  An openrc init script is available at
+`/etc/init.d/pacoloco`.
+
+Currently this is available for Alpine edge only, but will be included in the
+3.23 release in late 2025 presumably.
+
 ### Docker
 
 Pacoloco can be used with docker.
 
 You can get a prebuilt image from GitHub's [container registry](https://github.com/anatol/pacoloco/pkgs/container/pacoloco) (see also sidebar).
 Currently the images are built for `amd64` and ARM (`arm64`, `armv7`) architectures.
+
 ```sh
 docker pull ghcr.io/anatol/pacoloco
 ```
+
 Available tags are: `latest` = git master and any git tags.
 
-
 You can also build it yourself:
+
 ```sh
-$ git clone https://github.com/anatol/pacoloco && cd pacoloco
-$ docker build -t ghcr.io/anatol/pacoloco .
+git clone https://github.com/anatol/pacoloco && cd pacoloco
+docker build -t ghcr.io/anatol/pacoloco .
 ```
 
 Run it like this:
+
 ```sh
 $ docker run -p 9129:9129 \
     -v /path/to/config/pacoloco.yaml:/etc/pacoloco.yaml \
     -v /path/to/cache:/var/cache/pacoloco \
     ghcr.io/anatol/pacoloco
 ```
+
 You need to provide paths or volumes to store application data.
 
 Alternatively, you can use docker-compose:
+
 ```yaml
 ---
 version: "3.8"
@@ -154,7 +168,7 @@ That's it. Since now pacman requests will be proxied through our pacoloco server
 
 ## Handling multiple architectures
 
-*pacoloco* does not care about the architecture of your repo as it acts as a mere proxy.
+_pacoloco_ does not care about the architecture of your repo as it acts as a mere proxy.
 
 Thus it can handle multiple different arches transparently. One way to do it is to add multiple
 repositories with names `foobar_$arch` e.g.:
