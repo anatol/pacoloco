@@ -163,3 +163,34 @@ repos:
 	}
 	require.Equal(t, want, got)
 }
+
+// test with Tls enabled
+func TestLoadConfigWithTls(t *testing.T) {
+	got := parseConfig([]byte(`
+cache_dir: /tmp
+download_timeout: 200
+port: 9139
+tls:
+  key: config_test.go
+  cert: config_test.go
+repos:
+  archlinux:
+    url: http://mirrors.kernel.org/archlinux
+
+`))
+	want := &Config{
+		CacheDir: `/tmp`,
+		Port:     9139,
+		Repos: map[string]*Repo{
+			"archlinux": {
+				URL: "http://mirrors.kernel.org/archlinux",
+			},
+		},
+		DownloadTimeout: 200,
+		Tls: &Tls{
+			Key:         "config_test.go",
+			Certificate: "config_test.go",
+		},
+	}
+	require.Equal(t, want, got)
+}

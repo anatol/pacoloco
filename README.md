@@ -106,6 +106,9 @@ repos:
     mirrorlist: /etc/pacman.d/reflector_mirrorlist # Be careful! Check that pacoloco URL is NOT included in that file!
 http_proxy: http://foo.company.com:8989 # Enable this only if you have pacoloco running behind a proxy
 user_agent: Pacoloco/1.2
+tls: # optional section, add it if you want to enable tls for the server
+  key:  privatekey.pem
+  cert: certificate.pem
 prefetch: # optional section, add it if you want to enable prefetching
   cron: 0 0 3 * * * * # standard cron expression (https://en.wikipedia.org/wiki/Cron#CRON_expression) to define how frequently prefetch, see https://github.com/gorhill/cronexpr#implementation for documentation.
   ttl_unaccessed_in_days: 30  # defaults to 30, set it to a higher value than the number of consecutive days you don't update your systems
@@ -121,6 +124,7 @@ prefetch: # optional section, add it if you want to enable prefetching
 * `repos` is a list of repositories to mirror. Each repo needs `name` and url of its Arch mirrors. Note that url can be specified either with `url` or `urls` properties, one and only one can be used for each repo configuration. Each repo could have its own `http_proxy`, which would shadow the global `http_proxy` (see below).
 * `http_proxy` is only to be used if you have pacoloco running behind a proxy
 * `user_agent` user agent used to fetch the files from repositories. Default value is `Pacoloco/1.2`.
+* The `tls` section allows to enable tls encryption for the server. Both, the `key` and the `cert`ificate have to be provided and readable.
 * The `prefetch` section allows to enable packages prefetching. Comment it out to disable it.
 * To test out if the cron value does what you'd expect to do, check cronexpr [implementation](https://github.com/gorhill/cronexpr#implementation) or [test it](https://play.golang.org/p/IK2hrIV7tUk)
 * For what regards `mirrorlist`, be sure that pacoloco itself is NOT included in the chosen `mirrorlist` file. It can be integrated with reflector too, either by changing reflector's output path or by including pacoloco directly for standard repos in `/etc/pacman.conf` (e.g. adding a `Server=...` entry or a custom mirrorlist file which includes only pacoloco URL).
