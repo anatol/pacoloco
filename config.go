@@ -36,6 +36,11 @@ type RefreshPeriod struct {
 	TTLUnupdated  int    `yaml:"ttl_unupdated_in_days"`
 }
 
+type Tls struct {
+	Certificate string `yaml:"cert"`
+	Key         string `yaml:"key"`
+}
+
 type Config struct {
 	CacheDir        string           `yaml:"cache_dir"`
 	Address         string           `yaml:"address"`
@@ -47,6 +52,7 @@ type Config struct {
 	HttpProxy       string           `yaml:"http_proxy"`
 	UserAgent       string           `yaml:"user_agent"`
 	LogTimestamp    bool             `yaml:"set_timestamp_to_logs"`
+	Tls             *Tls             `yaml:"tls"`
 }
 
 var config *Config
@@ -57,6 +63,7 @@ func parseConfig(raw []byte) *Config {
 		Address:  DefaultAddress,
 		Port:     DefaultPort,
 		Prefetch: nil,
+		Tls:      nil,
 	}
 
 	if err := yaml.Unmarshal(raw, &result); err != nil {
@@ -110,6 +117,15 @@ func parseConfig(raw []byte) *Config {
 		}
 		if _, err := cronexpr.Parse(result.Prefetch.Cron); err != nil {
 			log.Fatal("Invalid cron string (if you don't know how to compose them, there are many online utilities for doing so). Please check https://github.com/gorhill/cronexpr#implementation for documentation.")
+		}
+	}
+
+	if result.Tls != nil {
+		if unix.Access(result.Tls.Certificate, unix.R_OK) != nil {
+			log.Fatalf("tls cert file %v does not exist or isn't readable for userid %v", result.Tls.Certificate, os.Getuid())
+		}
+		if unix.Access(result.Tls.Key, unix.R_OK) != nil {
+			log.Fatalf("tls key file %v does not exist or isn't readable for userid %v", result.Tls.Key, os.Getuid())
 		}
 	}
 	return &result

@@ -143,7 +143,14 @@ func main() {
 	http.HandleFunc("/repo/", pacolocoHandler)
 	// Expose prometheus metrics
 	http.Handle("/metrics", promhttp.Handler())
-	log.Fatal(http.ListenAndServe(listenAddr, nil))
+	if config.Tls != nil {
+		err = http.ListenAndServeTLS(listenAddr, config.Tls.Certificate, config.Tls.Key, nil)
+	} else {
+		err = http.ListenAndServe(listenAddr, nil)
+	}
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 // walks through given directory and gathers its stats. Returns cache size in bytes and package count
