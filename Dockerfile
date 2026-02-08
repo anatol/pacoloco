@@ -1,4 +1,4 @@
-FROM golang:alpine3.21 AS common
+FROM golang:alpine3.23 AS common
 
 RUN apk add gcc libc-dev
 
@@ -14,7 +14,7 @@ RUN go test -ldflags="-s -w"
 FROM common AS build
 RUN go build -ldflags="-s -w"
 
-FROM alpine:3.21 AS executable
+FROM alpine:3.23 AS executable
 
 RUN apk add tzdata
 
