@@ -66,7 +66,7 @@ func TestParallelDownload(t *testing.T) {
 	counter := sync.WaitGroup{}
 	counter.Add(num)
 
-	for i := 0; i < num; i++ {
+	for range num {
 		go func() {
 			defer counter.Done()
 

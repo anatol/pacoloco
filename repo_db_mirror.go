@@ -130,10 +130,7 @@ func downloadAndParseDb(mirror MirrorDB) error {
 		maxBatchSize := 2000
 		numOfPkgs := len(repoList)
 		for i := 0; i < numOfPkgs; i += maxBatchSize {
-			ends := i + maxBatchSize
-			if ends > numOfPkgs {
-				ends = numOfPkgs
-			}
+			ends := min(i+maxBatchSize, numOfPkgs)
 			newList := repoList[i:ends]
 			if db := prefetchDB.Save(&newList); db.Error != nil {
 				if strings.Contains(fmt.Sprint(db.Error), "too many SQL variables") {
