@@ -20,76 +20,15 @@ import (
 var configFile = flag.String("config", "/etc/pacoloco.yaml", "Path to config file")
 
 var (
-	pathRegex       *regexp.Regexp
-	filenameRegex   *regexp.Regexp // to get the details of a package (arch, version etc)
-	filenameDBRegex *regexp.Regexp // to get the filename from the db file
-	mirrorlistRegex *regexp.Regexp // to extract the url from a mirrorlist file
+	pathRegex       = regexp.MustCompile("^/repo/([^/]*)(/.*)?/([^/]*)$")
+	filenameRegex   = regexp.MustCompile("^([a-z0-9._+-]+)-([a-zA-Z0-9:._+]+-[0-9.]+)-([a-zA-Z0-9:._+]+)(([.]pkg[.]tar(([.]gz)|([.]bz2)|([.]xz)|([.]zst)|([.]lzo)|([.]lrz)|([.]lz4)|([.]lz)|([.]Z))?)([.]sig)?)$")
+	filenameDBRegex = regexp.MustCompile("[%]FILENAME[%]\n([^\n]+)\n")
+	mirrorlistRegex = regexp.MustCompile(`^\s*Server\s*=\s*([^\s$]+)(\$[^\s]+)[\s]*(#.*)?$`)
 	prefetchDB      *gorm.DB
 )
 
-// Accepted formats
-var allowedPackagesExtensions []string
-
-func init() {
-	var err error
-	pathRegex, err = regexp.Compile("^/repo/([^/]*)(/.*)?/([^/]*)$")
-	if err != nil {
-		panic(err)
-	}
-	// source: https://archlinux.org/pacman/makepkg.conf.5.html PKGEXT section, sorted with compressed formats as first.
-	allowedPackagesExtensions = []string{".pkg.tar.zst", ".pkg.tar.gz", ".pkg.tar.xz", ".pkg.tar.bz2", ".pkg.tar.lzo", ".pkg.tar.lrz", ".pkg.tar.lz4", ".pkg.tar.lz", ".pkg.tar.Z", ".pkg.tar"}
-
-	// Filename regex explanation (also here https://regex101.com/r/qB0fQ7/36 )
-	/*
-		The filename relevant matches are:
-		^([a-z0-9._+-]+)			a package filename must be a combination of lowercase letters,numbers,dots, underscores, plus symbols or dashes
-		-							separator
-		([a-z0-9A-Z:._+]+-[0-9.]+)	epoch/version. an epoch can be written as (whatever)-(sequence of numbers with possibly dots)
-		-							separator
-		([a-zA-Z0-9:._+]+)			arch
-		-							separator
-		(([.]...)$					file extension, explanation below
-
-			File extension explanation:
-			(
-				([.]pkg[.]tar		final file extension must start with .pkg.tar, then another suffix can be present
-					(
-						([.]gz)|	they are in disjunction with each other
-						([.]bz2)|
-						([.]xz)|
-						([.]zst)|
-						([.]lzo)|
-						([.]lrz)|
-						([.]lz4)|
-						([.]lz)|
-						([.]Z)
-					)?				they are not mandatory
-				)
-				([.]sig)?			It could be a signature, so it could have a terminating .sig extension
-			)$
-
-
-	*/
-	filenameRegex, err = regexp.Compile("^([a-z0-9._+-]+)-([a-zA-Z0-9:._+]+-[0-9.]+)-([a-zA-Z0-9:._+]+)(([.]pkg[.]tar(([.]gz)|([.]bz2)|([.]xz)|([.]zst)|([.]lzo)|([.]lrz)|([.]lz4)|([.]lz)|([.]Z))?)([.]sig)?)$")
-	if err != nil {
-		log.Fatal(err)
-	} // shouldn't happen
-	filenameDBRegex, err = regexp.Compile("[%]FILENAME[%]\n([^\n]+)\n")
-	if err != nil {
-		log.Fatal(err)
-	} // shouldn't happen
-
-	//	Analysis of the mirrorlistRegex regex (also here https://regex101.com/r/1oEit0/1):
-	//  ^\s*Server\s*=\s*						Starts with `Server=` keyword, with optional spaces before and after `Server` and `=`
-	//  ([^\s$]+)(\$[^\s]+)						Non white spaces and not $ characters composes the url, which must end with a $ string (e.g. `$repo/os/$arch`)
-	//  [\s]*									Optional ending whitespaces
-	//  (#.*)?									Optional comment starting with #
-
-	mirrorlistRegex, err = regexp.Compile(`^\s*Server\s*=\s*([^\s$]+)(\$[^\s]+)[\s]*(#.*)?$`)
-	if err != nil {
-		log.Fatal(err)
-	} // shouldn't happen
-}
+// source: https://archlinux.org/pacman/makepkg.conf.5.html PKGEXT section, sorted with compressed formats as first.
+var allowedPackagesExtensions = []string{".pkg.tar.zst", ".pkg.tar.gz", ".pkg.tar.xz", ".pkg.tar.bz2", ".pkg.tar.lzo", ".pkg.tar.lrz", ".pkg.tar.lz4", ".pkg.tar.lz", ".pkg.tar.Z", ".pkg.tar"}
 
 func main() {
 	flag.Parse()
@@ -104,7 +43,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if config.LogTimestamp == true {
+	if config.LogTimestamp {
 		log.SetFlags(log.LstdFlags)
 	}
 	if config.Prefetch != nil {
@@ -160,15 +99,19 @@ func main() {
 func gatherCacheStats(repoDir string) (totalCacheSize float64, totalPackageCount float64, err error) {
 	var size int64
 	var numberOfPackages int64
-	err = filepath.Walk(repoDir, func(path string, info os.FileInfo, err error) error {
+	err = filepath.WalkDir(repoDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if !info.IsDir() {
+		if !d.IsDir() {
+			info, err := d.Info()
+			if err != nil {
+				return err
+			}
 			size += info.Size()
 			numberOfPackages++
 		}
-		return err
+		return nil
 	})
 	return float64(size), float64(numberOfPackages), err
 }
@@ -246,14 +189,7 @@ func prefetchRequest(urlPath string, cachePath string) error {
 		}
 	}
 
-	if config.Prefetch != nil {
-		if !strings.HasSuffix(f.fileName, ".sig") && !strings.HasSuffix(f.fileName, ".db") {
-			updateDBRequestedFile(f.repoName, f.fileName) // update info for prefetching
-		} else if strings.HasSuffix(f.fileName, ".db") {
-			updateDBRequestedDB(f.repoName, f.pathAtRepo, f.fileName)
-		}
-	}
-
+	maybeUpdatePrefetchDB(f)
 	return nil
 }
 
@@ -291,13 +227,17 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 		}
 	}
 
-	if config.Prefetch != nil {
-		if !strings.HasSuffix(f.fileName, ".sig") && !strings.HasSuffix(f.fileName, ".db") {
-			updateDBRequestedFile(f.repoName, f.fileName) // update info for prefetching
-		} else if strings.HasSuffix(f.fileName, ".db") {
-			updateDBRequestedDB(f.repoName, f.pathAtRepo, f.fileName)
-		}
-	}
-
+	maybeUpdatePrefetchDB(f)
 	return nil
+}
+
+func maybeUpdatePrefetchDB(f *RequestedFile) {
+	if config.Prefetch == nil {
+		return
+	}
+	if !strings.HasSuffix(f.fileName, ".sig") && !strings.HasSuffix(f.fileName, ".db") {
+		updateDBRequestedFile(f.repoName, f.fileName)
+	} else if strings.HasSuffix(f.fileName, ".db") {
+		updateDBRequestedDB(f.repoName, f.pathAtRepo, f.fileName)
+	}
 }

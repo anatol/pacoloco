@@ -7,33 +7,31 @@ import (
 	"io"
 	"log"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 )
 
 func extractFilenamesFromTar(filePath string) ([]string, error) {
 	f, err := os.Open(filePath)
-	reader := bufio.NewReader(f)
 	if err != nil {
-		log.Printf("error: %v\n", err)
-		return []string{}, err
-	} // die quietly
-	var pkgList []string
-	tr := tar.NewReader(reader)
-	if err != nil {
-		log.Printf("error: %v\n", err)
-		return []string{}, err
+		return nil, err
 	}
+	defer f.Close()
+
+	var pkgList []string
+	tr := tar.NewReader(bufio.NewReader(f))
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
 			break // End of archive
 		}
+		if err != nil {
+			return nil, err
+		}
 		if strings.HasSuffix(hdr.Name, "/desc") {
 			buf := new(strings.Builder)
 			if _, err = io.Copy(buf, tr); err != nil {
-				log.Printf("error: %v\n", err)
+				log.Printf("error: %v", err)
 				return []string{}, err
 			}
 			pkgName := buf.String()
@@ -74,12 +72,9 @@ func buildMirrorPkg(fileName string, repoName string, prefixPath string) (Mirror
 
 // Downloads the db from the mirror and adds MirrorPackages
 func downloadAndParseDb(mirror MirrorDB) error {
-	// create directory if it does not exist
-	tmpDir := path.Join(config.CacheDir, "tmp-db")
-	if _, err := os.Stat(tmpDir); os.IsNotExist(err) {
-		if err := os.MkdirAll(tmpDir, os.ModePerm); err != nil {
-			return err
-		}
+	tmpDir := filepath.Join(config.CacheDir, "tmp-db")
+	if err := os.MkdirAll(tmpDir, os.ModePerm); err != nil {
+		return err
 	}
 	matches := pathRegex.FindStringSubmatch(mirror.URL)
 	if len(matches) == 0 {
@@ -116,31 +111,13 @@ func downloadAndParseDb(mirror MirrorDB) error {
 		if err != nil {
 			// If a repo package has an invalid name
 			// e.g. is not a repo package, maybe it is a src package or whatever, we skip it
-			log.Printf("error: %v\n", err)
+			log.Printf("error: %v", err)
 			continue
 		}
 		repoList = append(repoList, rpkg)
 	}
-	if db := prefetchDB.Save(&repoList); db.Error != nil {
-		if !strings.Contains(fmt.Sprint(db.Error), "too many SQL variables") {
-			return db.Error
-		}
-		// Reduce the number of inserts each time
-		// It is not very clear which parameter did cause "too many SQL variables". Useful reference: https://www.sqlite.org/limits.html
-		maxBatchSize := 2000
-		numOfPkgs := len(repoList)
-		for i := 0; i < numOfPkgs; i += maxBatchSize {
-			ends := min(i+maxBatchSize, numOfPkgs)
-			newList := repoList[i:ends]
-			if db := prefetchDB.Save(&newList); db.Error != nil {
-				if strings.Contains(fmt.Sprint(db.Error), "too many SQL variables") {
-					return fmt.Errorf("db error: Batch size is too big, change it in the config. This is a bug")
-				} else {
-					return db.Error
-				}
-			}
-		}
-
+	if db := prefetchDB.CreateInBatches(&repoList, 2000); db.Error != nil {
+		return db.Error
 	}
 	log.Printf("Added entries to db.")
 	return nil
@@ -149,18 +126,15 @@ func downloadAndParseDb(mirror MirrorDB) error {
 // download dbs from their URLs stored in the mirror_dbs table and load their content in the mirror_packages table
 func downloadAndParseDbs() error {
 	mirrors := getAllMirrorsDB()
-	// create tmp directory to store the db files
 	dbsPath := filepath.Join(config.CacheDir, "tmp-db")
-	if _, err := os.Stat(dbsPath); os.IsNotExist(err) {
-		if err := os.MkdirAll(dbsPath, os.ModePerm); err != nil {
-			return err
-		}
+	if err := os.MkdirAll(dbsPath, os.ModePerm); err != nil {
+		return err
 	}
 	for _, mirror := range mirrors {
 		if err := downloadAndParseDb(mirror); err != nil {
 			// If a mirror is down or a database file is not available, we simply skip it cause
 			// the cleanPrefetchDB procedure should take care of purging dead mirrors
-			log.Printf("An error occurred for mirror %v :%v\n", mirror, err)
+			log.Printf("An error occurred for mirror %v :%v", mirror, err)
 		}
 	}
 	return nil

@@ -66,7 +66,7 @@ func uncompress(inputFile string, targetFile string) error {
 	if err != nil {
 		return fmt.Errorf("%s unable to read header", inputFile)
 	}
-	_, err = compressedFile.Seek(0, 0)
+	_, err = compressedFile.Seek(0, io.SeekStart)
 	if err != nil {
 		return err
 	}

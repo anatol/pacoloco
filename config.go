@@ -12,7 +12,6 @@ import (
 )
 
 const (
-	DefaultAddress       = ""
 	DefaultPort          = 9129
 	DefaultCacheDir      = "/var/cache/pacoloco"
 	DefaultTTLUnaccessed = 30
@@ -60,10 +59,7 @@ var config *Config
 func parseConfig(raw []byte) (*Config, error) {
 	result := Config{
 		CacheDir: DefaultCacheDir,
-		Address:  DefaultAddress,
 		Port:     DefaultPort,
-		Prefetch: nil,
-		Tls:      nil,
 	}
 
 	if err := yaml.Unmarshal(raw, &result); err != nil {

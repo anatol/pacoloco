@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"path/filepath"
 	"time"
 
 	"gorm.io/driver/sqlite"
@@ -26,7 +27,7 @@ type Package struct {
 
 // there are many possible paths for a package, this function returns ALL the possible ones
 func (pkg Package) getAllPaths() []string {
-	baseString := path.Join("pkgs", pkg.RepoName, pkg.PackageName+"-"+pkg.Version+"-"+pkg.Arch)
+	baseString := filepath.Join("pkgs", pkg.RepoName, pkg.PackageName+"-"+pkg.Version+"-"+pkg.Arch)
 	var pkgPaths []string
 	for _, ext := range allowedPackagesExtensions {
 		pkgPaths = append(pkgPaths, baseString+ext)
@@ -69,49 +70,35 @@ func createPrefetchDB() {
 	if config == nil {
 		log.Fatalf("Config have not been parsed yet")
 	}
-	dbPath := path.Join(config.CacheDir, DefaultDBName)
-	exists, err := fileExists(dbPath)
+	dbPath := filepath.Join(config.CacheDir, DefaultDBName)
+	if _, err := os.Stat(dbPath); err == nil {
+		return // DB already exists
+	}
+	log.Printf("Creating %v", dbPath)
+	db, err := getDBConnection()
 	if err != nil {
 		log.Fatal(err)
 	}
-	if !exists {
-		log.Printf("Creating %v", dbPath)
-		file, err := os.Create(dbPath) // Create SQLite file
-		if err != nil {
-			log.Fatal(err)
-		}
-		file.Close()
-		db, err := getDBConnection()
-		if err != nil {
-			log.Fatal(err)
-		}
-		db.Migrator().CreateTable(&Package{})
-		db.Migrator().CreateTable(&MirrorDB{})
-		db.Migrator().CreateTable(&MirrorPackage{})
-	}
+	db.Migrator().CreateTable(&Package{})
+	db.Migrator().CreateTable(&MirrorDB{})
+	db.Migrator().CreateTable(&MirrorPackage{})
 }
 
 func getDBConnection() (*gorm.DB, error) {
-	dbPath := path.Join(config.CacheDir, DefaultDBName)
 	if config == nil {
 		return nil, fmt.Errorf("config have not been parsed yet")
 	}
-	var newLogger logger.Interface
-	if config.LogTimestamp == true {
-		newLogger = logger.New(
-			log.New(os.Stdout, "\r\n", log.LstdFlags), // io writer
-			logger.Config{
-				SlowThreshold:             time.Second, // Slow SQL threshold
-				IgnoreRecordNotFoundError: true,        // Ignore ErrRecordNotFound error for logger
-			})
-	} else {
-		newLogger = logger.New(
-			log.New(os.Stdout, "\r\n", 0), // io writer
-			logger.Config{
-				SlowThreshold:             time.Second, // Slow SQL threshold
-				IgnoreRecordNotFoundError: true,        // Ignore ErrRecordNotFound error for logger
-			})
+	dbPath := filepath.Join(config.CacheDir, DefaultDBName)
+	logFlags := 0
+	if config.LogTimestamp {
+		logFlags = log.LstdFlags
 	}
+	newLogger := logger.New(
+		log.New(os.Stdout, "\r\n", logFlags),
+		logger.Config{
+			SlowThreshold:             time.Second,
+			IgnoreRecordNotFoundError: true,
+		})
 
 	return gorm.Open(sqlite.Open(dbPath), &gorm.Config{Logger: newLogger})
 }
@@ -163,17 +150,17 @@ func getAndDropDeadPackages(olderThan time.Time) []Package {
 func getPackageFromFilenameAndRepo(repoName string, fileName string) (Package, error) {
 	matches := filenameRegex.FindStringSubmatch(fileName)
 	if len(matches) >= 7 {
-		PackageName := matches[1]
+		packageName := matches[1]
 		version := matches[2]
 		arch := matches[3]
 		now := time.Now()
 		return Package{
-			PackageName,
-			version,
-			arch,
-			repoName,
-			&now,
-			&now,
+			PackageName:         packageName,
+			Version:             version,
+			Arch:                arch,
+			RepoName:            repoName,
+			LastTimeDownloaded:  &now,
+			LastTimeRepoUpdated: &now,
 		}, nil
 	}
 	return Package{}, fmt.Errorf("package with name '%v' cannot be prefetched cause it doesn't follow the package name formatting regex", fileName)
@@ -198,7 +185,7 @@ func (p PkgToUpdate) getDownloadURLs() []string {
 			return urls
 		}
 	}
-	log.Println("warning: file extension \"" + p.FileExt + "\" does not belong to the allowed set of packages extensions, so \"" + baseString + p.FileExt + "\" won't be downloaded")
+	log.Printf("warning: file extension %q does not belong to the allowed set of packages extensions, so %q won't be downloaded", p.FileExt, baseString+p.FileExt)
 	return urls
 }
 
@@ -228,7 +215,7 @@ func updateDBRequestedDB(repoName string, pathAtRepo string, filename string) (M
 	if len(matches) == 0 {
 		return MirrorDB{}, fmt.Errorf("url '%v' is invalid, cannot save it for prefetching", urlDB)
 	}
-	mirror := MirrorDB{urlDB, repoName, &now}
+	mirror := MirrorDB{URL: urlDB, RepoName: repoName, LastTimeDownloaded: &now}
 	if db := prefetchDB.Save(&mirror); db.Error != nil {
 		return MirrorDB{}, db.Error
 	}

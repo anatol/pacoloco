@@ -1,10 +1,11 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -15,11 +16,11 @@ import (
 func getCronDuration(cronStr string, from time.Time) (time.Duration, error) {
 	cron, err := cronexpr.Parse(cronStr)
 	if err != nil {
-		return time.Duration(0), err // shouldn't happen cause it is being checked on creation
+		return 0, err // shouldn't happen cause it is being checked on creation
 	}
 	nextTick := cron.Next(from)
 	if nextTick.IsZero() {
-		return time.Duration(0), fmt.Errorf("there is no next tick")
+		return 0, fmt.Errorf("there is no next tick")
 	}
 	return nextTick.Sub(from), nil
 }
@@ -28,7 +29,6 @@ func getCronDuration(cronStr string, from time.Time) (time.Duration, error) {
 func setupPrefetchTicker() *time.Ticker {
 	if config.Prefetch == nil {
 		log.Fatalf("Called setupPrefetchTicker with config.Prefetch uninitialized")
-		return nil
 	}
 
 	duration, err := getCronDuration(config.Prefetch.Cron, time.Now())
@@ -83,7 +83,7 @@ func updateDBRequestedFile(repoName string, fileName string) {
 
 	pkg, err := getPackageFromFilenameAndRepo(repoName, fileName)
 	if err != nil {
-		log.Printf("error: %v\n", err)
+		log.Printf("error: %v", err)
 		// Don't register them if they have a wrong format.
 		// The accepted format for a package name is name-version-subversion-arch.pkg.tar.zst
 		// otherwise I cannot know if a package has been updated
@@ -91,20 +91,19 @@ func updateDBRequestedFile(repoName string, fileName string) {
 	}
 	if prefetchDB == nil {
 		log.Fatal("Trying to insert data into a non-existent db")
-		return
 	}
 	var existentPkg Package
 	prefetchDB.First(&existentPkg, "packages.package_name = ? and packages.arch = ? AND packages.repo_name = ?", pkg.PackageName, pkg.Arch, pkg.RepoName)
 	if existentPkg.PackageName == "" {
 		if db := prefetchDB.Save(&pkg); db.Error != nil {
-			log.Printf("db error: %v\n", db.Error)
+			log.Printf("db error: %v", db.Error)
 		}
 	} else {
 		if existentPkg.Version == pkg.Version {
 			now := time.Now()
 			existentPkg.LastTimeDownloaded = &now
 			if db := prefetchDB.Save(existentPkg); db.Error != nil {
-				log.Printf("db error: %v\n", db.Error)
+				log.Printf("db error: %v", db.Error)
 			}
 		} else {
 			// if on a repo there is a different version, we assume it is the most recent one.
@@ -115,7 +114,7 @@ func updateDBRequestedFile(repoName string, fileName string) {
 			// I hope not, cause it would be nonsensical. If it has some sense, mirror name should be added as a primary key too
 			purgePkgIfExists(&existentPkg)
 			if db := prefetchDB.Save(pkg); db.Error != nil {
-				log.Printf("db error: %v\n", db.Error)
+				log.Printf("db error: %v", db.Error)
 			}
 		}
 	}
@@ -127,29 +126,26 @@ func updateDBPrefetchedFile(repoName string, fileName string) {
 	if strings.HasSuffix(fileName, ".pkg.tar.zst") {
 		pkg, err := getPackageFromFilenameAndRepo(repoName, fileName)
 		if err != nil {
-			log.Printf("error: %v\n", err)
+			log.Printf("error: %v", err)
 			return
 		}
 		if prefetchDB == nil {
 			log.Fatal("Trying to insert data into a non-existent db")
-			return
 		}
 		var existentPkg Package
 		prefetchDB.First(&existentPkg, "packages.package_name = ? and packages.arch = ? AND packages.repo_name = ?", pkg.PackageName, pkg.Arch, pkg.RepoName)
 		if existentPkg.PackageName == "" {
 			if db := prefetchDB.Save(&pkg); db.Error != nil {
-				log.Printf("db error: %v\n", db.Error)
-			} // save it anyway
-			if err := fmt.Errorf("warning: prefetched package wasn't on the db"); err != nil {
-				log.Printf("error: %v\n", err)
-				return
+				log.Printf("db error: %v", db.Error)
 			}
+			log.Printf("warning: prefetched package wasn't on the db")
+			return
 		} else {
 			if existentPkg.Version == pkg.Version {
 				now := time.Now()
 				existentPkg.LastTimeRepoUpdated = &now
 				if db := prefetchDB.Save(existentPkg); db.Error != nil {
-					log.Printf("db error: %v\n", db.Error)
+					log.Printf("db error: %v", db.Error)
 				}
 			} else {
 				// if on a repo there is a different version, we assume it is the most recent one.
@@ -161,7 +157,7 @@ func updateDBPrefetchedFile(repoName string, fileName string) {
 				// I hope not, because it would be nonsensical. If it has some sense, mirror name should be added as a primary key too
 				purgePkgIfExists(&existentPkg)
 				if db := prefetchDB.Save(pkg); db.Error != nil {
-					log.Printf("db error: %v\n", db.Error)
+					log.Printf("db error: %v", db.Error)
 				}
 			}
 		}
@@ -173,24 +169,19 @@ func purgePkgIfExists(pkgToDel *Package) {
 	if pkgToDel == nil {
 		return
 	}
-	basePathsToDelete := pkgToDel.getAllPaths()
-	for _, p := range basePathsToDelete {
-		pathToDelete := path.Join(config.CacheDir, p)
-		if _, err := os.Stat(pathToDelete); !os.IsNotExist(err) {
-			// if it exists, delete it
-			if err := os.Remove(pathToDelete); err != nil {
-				log.Printf("Error while trying to remove unused package %v : %v", pathToDelete, err)
-			}
+	for _, p := range pkgToDel.getAllPaths() {
+		pathToDelete := filepath.Join(config.CacheDir, p)
+		if err := os.Remove(pathToDelete); err != nil && !errors.Is(err, os.ErrNotExist) {
+			log.Printf("Error while trying to remove unused package %v : %v", pathToDelete, err)
 		}
 	}
 }
 
 // purges unused and dead packages both from db and their files and removes unused db links from the db
 func cleanPrefetchDB() {
-	log.Printf("Cleaning the db...\n")
+	log.Printf("Cleaning the db...")
 	if config.Prefetch == nil {
 		log.Fatalf("Shouldn't call a prefetch purge when prefetch is not set in the yaml. This is most likely a bug.")
-		return
 	}
 	period := 24 * time.Hour * time.Duration(config.Prefetch.TTLUnaccessed)
 	olderThan := time.Now().Add(-period)
@@ -211,7 +202,7 @@ func cleanPrefetchDB() {
 	mirrors := getAllMirrorsDB()
 	for _, mirror := range mirrors {
 		if _, exists := config.Repos[mirror.RepoName]; exists {
-			if strings.Index(mirror.URL, "/repo/") != 0 {
+			if !strings.HasPrefix(mirror.URL, "/repo/") {
 				log.Printf("warning: deleting %v link due to migrating to a newer version of pacoloco. Simply do 'pacman -Sy' on repo %v to fix the prefetching.", mirror.URL, mirror.RepoName)
 				deleteMirrorDBFromDB(mirror)
 			}
@@ -224,7 +215,7 @@ func cleanPrefetchDB() {
 
 	// should be useless but this guarantees that everything got cleaned properly
 	_ = deleteMirrorPkgsTable()
-	log.Printf("Db cleaned.\n")
+	log.Printf("Db cleaned.")
 }
 
 // This calls the actual prefetching process, should be called once the db had been cleaned
@@ -242,14 +233,14 @@ func prefetchAllPkgs() {
 		var failed []string
 		for _, url := range urls {
 			if err := prefetchRequest(url, ""); err != nil {
-				failed = append(failed, fmt.Sprintf("Failed to prefetch package at %v because %v\n", url, err))
+				failed = append(failed, fmt.Sprintf("Failed to prefetch package at %v because %v", url, err))
 				continue
 			}
 			purgePkgIfExists(&pkg) // delete the old package
 			if strings.HasSuffix(url, ".sig") {
-				log.Printf("Successfully prefetched %v-%v signature\n", p.PackageName, p.Arch)
+				log.Printf("Successfully prefetched %v-%v signature", p.PackageName, p.Arch)
 			} else {
-				log.Printf("Successfully prefetched %v-%v package\n", p.PackageName, p.Arch)
+				log.Printf("Successfully prefetched %v-%v package", p.PackageName, p.Arch)
 			}
 		}
 		if len(urls)-len(failed) < 2 { // If less than 2 packages succeeded in being downloaded, show error messages
@@ -265,13 +256,13 @@ func prefetchPackages() {
 	if prefetchDB == nil {
 		return
 	}
-	log.Printf("Starting prefetching routine...\n")
+	log.Printf("Starting prefetching routine...")
 	// update mirrorlists from file if they exist
 	// purge all useless files
 	cleanPrefetchDB()
 	// prefetch all Packages
-	log.Printf("Starting prefetching packages...\n")
+	log.Printf("Starting prefetching packages...")
 	prefetchAllPkgs()
-	log.Printf("Finished prefetching packages!\n")
-	log.Printf("Finished prefetching routine!\n")
+	log.Printf("Finished prefetching packages!")
+	log.Printf("Finished prefetching routine!")
 }

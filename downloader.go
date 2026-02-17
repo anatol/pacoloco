@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -67,8 +66,6 @@ func (d *Downloader) download() error {
 	var proxyURL *url.URL
 	if d.repo.HttpProxy != "" {
 		proxyURL, _ = url.Parse(d.repo.HttpProxy)
-	} else {
-		proxyURL = nil
 	}
 
 	for _, u := range urls {
@@ -95,9 +92,9 @@ func (d *Downloader) downloadFromUpstream(repoURL string, proxyURL *url.URL) err
 	if config.DownloadTimeout > 0 {
 		ctx, ctxCancel := context.WithTimeout(context.Background(), time.Duration(config.DownloadTimeout)*time.Second)
 		defer ctxCancel()
-		req, err = http.NewRequestWithContext(ctx, "GET", upstreamURL, nil)
+		req, err = http.NewRequestWithContext(ctx, http.MethodGet, upstreamURL, nil)
 	} else {
-		req, err = http.NewRequest("GET", upstreamURL, nil)
+		req, err = http.NewRequest(http.MethodGet, upstreamURL, nil)
 	}
 	if err != nil {
 		return err
@@ -148,15 +145,15 @@ func (d *Downloader) downloadFromUpstream(repoURL string, proxyURL *url.URL) err
 		return fmt.Errorf("unable to download url %s, status code is %d", upstreamURL, resp.StatusCode)
 	}
 
-	if lastModified := resp.Header.Get("Last-Modified"); lastModified != "" {
-		if lastModified, err := http.ParseTime(lastModified); err == nil {
-			d.modificationTime = lastModified
+	if lmStr := resp.Header.Get("Last-Modified"); lmStr != "" {
+		if lm, err := http.ParseTime(lmStr); err == nil {
+			d.modificationTime = lm
 		}
 	}
 
-	if contentLength := resp.Header.Get("Content-Length"); contentLength != "" {
-		if contentLength, err := strconv.Atoi(contentLength); err == nil {
-			d.contentLength = contentLength
+	if clStr := resp.Header.Get("Content-Length"); clStr != "" {
+		if cl, err := strconv.Atoi(clStr); err == nil {
+			d.contentLength = cl
 		}
 	}
 
@@ -169,7 +166,7 @@ func (d *Downloader) downloadFromUpstream(repoURL string, proxyURL *url.URL) err
 		return err
 	}
 
-	if d.eventDataReceivedSize != d.contentLength {
+	if d.contentLength > 0 && d.eventDataReceivedSize != d.contentLength {
 		return fmt.Errorf("receiving file %v: Content-Length is %v while received body length is %v", upstreamURL, d.contentLength, d.eventDataReceivedSize)
 	}
 
@@ -320,7 +317,7 @@ func (d *DownloadReader) Seek(offset int64, whence int) (int64, error) {
 // if the function returns nil for downloader and error then it means no download happens and the cached file needs to be serverd.
 // the caller of this function must invoke d.decreaseUsageCount() after done dealing with downloader
 func getDownloader(f *RequestedFile) (*Downloader, error) {
-	forceCheck := f.forceCheckAtServer()
+	forceCheck := forceCheckAtServer(f.fileName)
 	if f.cachedFileExists() && !forceCheck {
 		return nil, nil
 	}
@@ -425,34 +422,23 @@ func (f *RequestedFile) urlPath() string {
 
 // mkCacheDir creates cache directory if one does not exist
 func (f *RequestedFile) mkCacheDir() error {
-	if _, err := os.Stat(f.cacheDir); os.IsNotExist(err) {
-		if err := os.MkdirAll(f.cacheDir, os.ModePerm); err != nil {
-			return err
-		}
-	}
-	return nil
+	return os.MkdirAll(f.cacheDir, os.ModePerm)
 }
 
 func (f *RequestedFile) cachedFileExists() bool {
-	if _, err := os.Stat(f.cachedFilePath); err == nil {
-		return true
-	}
-	return false
+	_, err := os.Stat(f.cachedFilePath)
+	return err == nil
 }
 
 // temporary filename used to temporary contain the downloaded data
 func (f *RequestedFile) bufferFileName() string {
-	return path.Join(f.cacheDir, "."+f.fileName)
+	return filepath.Join(f.cacheDir, "."+f.fileName)
 }
 
-func (f *RequestedFile) forceCheckAtServer() bool {
-	return forceCheckAtServer(f.fileName)
-}
+// Suffixes for mutable files. We need to check the files modification date at the server.
+var forceCheckFiles = []string{".db", ".db.sig", ".files"}
 
 func forceCheckAtServer(fileName string) bool {
-	// Suffixes for mutable files. We need to check the files modification date at the server.
-	forceCheckFiles := []string{".db", ".db.sig", ".files"}
-
 	for _, e := range forceCheckFiles {
 		if strings.HasSuffix(fileName, e) {
 			return true

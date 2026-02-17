@@ -13,14 +13,14 @@ func (r *Repo) getUrls() []string {
 	if r.Mirrorlist != "" {
 		urls, err := r.getMirrorlistURLs()
 		if err != nil {
-			log.Printf("error getting urls from mirrorlist: %v", err.Error())
+			log.Printf("error getting urls from mirrorlist: %v", err)
 		}
 		return urls
-	} else if r.URL != "" {
-		return []string{r.URL}
-	} else {
-		return r.URLs
 	}
+	if r.URL != "" {
+		return []string{r.URL}
+	}
+	return r.URLs
 }
 
 func parseMirrorlistURLs(file *os.File) ([]string, error) {
@@ -78,6 +78,7 @@ func (r *Repo) getMirrorlistURLs() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer file.Close()
 
 	urls, err := parseMirrorlistURLs(file)
 	if err != nil {

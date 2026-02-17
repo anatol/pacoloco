@@ -10,17 +10,14 @@ import (
 )
 
 func setupPurgeStaleFilesRoutine() *time.Ticker {
-	ticker := time.NewTicker(time.Duration(24) * time.Hour) // purge files once a day
+	ticker := time.NewTicker(24 * time.Hour) // purge files once a day
 	go func() {
 		for repoName := range config.Repos {
 			purgeStaleFiles(config.CacheDir, config.PurgeFilesAfter, repoName)
 		}
-		for {
-			select {
-			case <-ticker.C:
-				for repoName := range config.Repos {
-					purgeStaleFiles(config.CacheDir, config.PurgeFilesAfter, repoName)
-				}
+		for range ticker.C {
+			for repoName := range config.Repos {
+				purgeStaleFiles(config.CacheDir, config.PurgeFilesAfter, repoName)
 			}
 		}
 	}()
@@ -42,14 +39,18 @@ func purgeStaleFiles(cacheDir string, purgeFilesAfter int, repoName string) {
 	var packageSize int64
 	var packageNum int64
 	// Go through all files in the repos, and check if access time is older than `removeIfOlder`
-	walkfn := func(path string, info os.FileInfo, err error) error {
+	walkfn := func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if !info.Mode().IsRegular() {
+		if !d.Type().IsRegular() {
 			return nil
 		}
 
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
 		t := times.Get(info)
 		atime := t.AccessTime()
 		if atime.Before(removeIfOlder) {
@@ -63,7 +64,7 @@ func purgeStaleFiles(cacheDir string, purgeFilesAfter int, repoName string) {
 		}
 		return nil
 	}
-	if err := filepath.Walk(pkgDir, walkfn); err != nil {
+	if err := filepath.WalkDir(pkgDir, walkfn); err != nil {
 		log.Println(err)
 	}
 	cachePackageGauge.WithLabelValues(repoName).Set(float64(packageNum))
