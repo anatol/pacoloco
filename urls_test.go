@@ -39,6 +39,40 @@ var expectedURLs = []string{
 	`http://another.test.co.uk/archlinux/`,
 }
 
+func TestGetUrlsSingleURL(t *testing.T) {
+	repo := &Repo{URL: "http://mirror.example.com/archlinux"}
+	urls := repo.getUrls()
+	require.Equal(t, []string{"http://mirror.example.com/archlinux"}, urls)
+}
+
+func TestGetUrlsMultipleURLs(t *testing.T) {
+	repo := &Repo{URLs: []string{
+		"http://mirror1.example.com/archlinux",
+		"http://mirror2.example.com/archlinux",
+	}}
+	urls := repo.getUrls()
+	require.Equal(t, []string{
+		"http://mirror1.example.com/archlinux",
+		"http://mirror2.example.com/archlinux",
+	}, urls)
+}
+
+func TestMirrorlistCaching(t *testing.T) {
+	temp := t.TempDir()
+	tmpMirrorfile := path.Join(temp, "tmpMirrorFile")
+	require.NoError(t, os.WriteFile(tmpMirrorfile, []byte(mirrorlist), 0o644))
+
+	repo := &Repo{Mirrorlist: tmpMirrorfile}
+
+	// First call should parse the mirrorlist
+	urls := repo.getUrls()
+	require.Equal(t, expectedURLs, urls)
+
+	// Second immediate call should return cached results (within 5s check interval)
+	urls2 := repo.getUrls()
+	require.Equal(t, expectedURLs, urls2)
+}
+
 func TestParseMirrorlist(t *testing.T) {
 	temp := t.TempDir()
 	tmpMirrorfile := path.Join(temp, "tmpMirrorFile")

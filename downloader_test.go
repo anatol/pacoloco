@@ -99,6 +99,99 @@ func TestParallelDownload(t *testing.T) {
 	counter.Wait()
 }
 
+func TestDownloadTimeout(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(3 * time.Second) // delay longer than timeout
+		w.Write([]byte("delayed response"))
+	}
+	mirror := httptest.NewServer(http.HandlerFunc(handler))
+	defer mirror.Close()
+
+	testDir := t.TempDir()
+
+	config = &Config{
+		CacheDir:        testDir,
+		Port:            -1,
+		DownloadTimeout: 1, // 1 second timeout
+		Repos: map[string]*Repo{
+			"timeout-repo": {URL: mirror.URL},
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/repo/timeout-repo/test-1-1-any.pkg.tar.zst", nil)
+	w := httptest.NewRecorder()
+	err := handleRequest(w, req)
+	require.Error(t, err)
+}
+
+func TestDownloadBadStatusCode(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+	mirror := httptest.NewServer(http.HandlerFunc(handler))
+	defer mirror.Close()
+
+	testDir := t.TempDir()
+
+	config = &Config{
+		CacheDir:        testDir,
+		Port:            -1,
+		DownloadTimeout: 10,
+		Repos: map[string]*Repo{
+			"bad-repo": {URL: mirror.URL},
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/repo/bad-repo/test-1-1-any.pkg.tar.zst", nil)
+	w := httptest.NewRecorder()
+	err := handleRequest(w, req)
+	require.Error(t, err)
+}
+
+func TestDownloadNotModified(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotModified)
+	}
+	mirror := httptest.NewServer(http.HandlerFunc(handler))
+	defer mirror.Close()
+
+	testDir := t.TempDir()
+
+	config = &Config{
+		CacheDir:        testDir,
+		Port:            -1,
+		DownloadTimeout: 10,
+		Repos: map[string]*Repo{
+			"notmod-repo": {URL: mirror.URL},
+		},
+	}
+
+	// Create a cached file so the downloader sends If-Modified-Since
+	cachePath := testDir + "/pkgs/notmod-repo"
+	require.NoError(t, os.MkdirAll(cachePath, os.ModePerm))
+	require.NoError(t, os.WriteFile(cachePath+"/test.db", []byte("cached"), os.ModePerm))
+
+	req := httptest.NewRequest(http.MethodGet, "/repo/notmod-repo/test.db", nil)
+	w := httptest.NewRecorder()
+	err := handleRequest(w, req)
+	require.NoError(t, err)
+	// Should serve from cache (304 means use cached version)
+	require.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestParseRequestURLInvalid(t *testing.T) {
+	config = &Config{}
+	_, err := parseRequestURL("/invalid/path")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "does not match expected format")
+
+	_, err = parseRequestURL("")
+	require.Error(t, err)
+
+	_, err = parseRequestURL("/repofoo/bar/test.db")
+	require.Error(t, err)
+}
+
 func TestRequestedFile(t *testing.T) {
 	config = &Config{}
 

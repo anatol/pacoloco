@@ -10,6 +10,47 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestPurgeEmptyDirectory(t *testing.T) {
+	testPacolocoDir, err := os.MkdirTemp(os.TempDir(), "*-pacoloco-repo")
+	require.NoError(t, err)
+	defer os.RemoveAll(testPacolocoDir)
+
+	// Don't create pkgs/testrepo directory - purge should handle missing dir gracefully
+	purgeStaleFiles(testPacolocoDir, 3600, "testrepo")
+
+	cachePackageNum, err := cachePackageGauge.GetMetricWithLabelValues("testrepo")
+	require.NoError(t, err)
+	require.Equal(t, float64(0), testutil.ToFloat64(cachePackageNum))
+
+	cachePackageSize, err := cacheSizeGauge.GetMetricWithLabelValues("testrepo")
+	require.NoError(t, err)
+	require.Equal(t, float64(0), testutil.ToFloat64(cachePackageSize))
+}
+
+func TestPurgeWithSubdirectories(t *testing.T) {
+	purgeFilesAfter := 3600 * 24 * 30
+
+	testPacolocoDir, err := os.MkdirTemp(os.TempDir(), "*-pacoloco-repo")
+	require.NoError(t, err)
+	defer os.RemoveAll(testPacolocoDir)
+
+	testRepo := path.Join(testPacolocoDir, "pkgs", "subrepo")
+	subDir := path.Join(testRepo, "subdir")
+	require.NoError(t, os.MkdirAll(subDir, os.ModePerm))
+
+	// Create a file in subdirectory
+	fileInSubDir := path.Join(subDir, "nested-file")
+	require.NoError(t, os.WriteFile(fileInSubDir, []byte("nested content"), os.ModePerm))
+
+	thresholdTime := time.Now().Add(time.Duration(-purgeFilesAfter) * time.Second)
+	os.Chtimes(fileInSubDir, thresholdTime.Add(-time.Hour), thresholdTime.Add(-time.Hour))
+
+	purgeStaleFiles(testPacolocoDir, purgeFilesAfter, "subrepo")
+
+	_, err = os.Stat(fileInSubDir)
+	require.ErrorIs(t, err, os.ErrNotExist, "nested file should be removed")
+}
+
 func TestPurge(t *testing.T) {
 	purgeFilesAfter := 3600 * 24 * 30 // purge files if they are not accessed for 30 days
 

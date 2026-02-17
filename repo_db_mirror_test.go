@@ -189,6 +189,33 @@ func addFileToTarWriter(pkgName string, content string, tarWriter *tar.Writer) e
 	return nil
 }
 
+func TestUncompressUnknownFormat(t *testing.T) {
+	tmpDir := testSetupHelper(t)
+	filePath := path.Join(tmpDir, "test.unknown")
+	// Write bytes that don't match any known magic
+	require.NoError(t, os.WriteFile(filePath, []byte{0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x00}, 0o644))
+	err := uncompress(filePath, filePath+".uncompressed")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unknown database compression format")
+}
+
+func TestUncompressEmptyFile(t *testing.T) {
+	tmpDir := testSetupHelper(t)
+	filePath := path.Join(tmpDir, "test.empty")
+	require.NoError(t, os.WriteFile(filePath, []byte{}, 0o644))
+	err := uncompress(filePath, filePath+".uncompressed")
+	require.Error(t, err)
+}
+
+func TestUncompressTruncatedGzip(t *testing.T) {
+	tmpDir := testSetupHelper(t)
+	filePath := path.Join(tmpDir, "test.gz.truncated")
+	// Write valid gzip magic but truncated data
+	require.NoError(t, os.WriteFile(filePath, []byte{0x1f, 0x8b, 0x08, 0x00}, 0o644))
+	err := uncompress(filePath, filePath+".uncompressed")
+	require.Error(t, err)
+}
+
 // Uncompresses a gzip file
 func TestUncompressGZ(t *testing.T) {
 	err := uncompress("nope", "nope")
