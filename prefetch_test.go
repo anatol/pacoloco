@@ -35,7 +35,11 @@ repos:
            -  https://mirror.example.com/mirror/packages/archlinux/
            -  http://mirror2.example.com/archlinux/test/
 `
-	config = parseConfig([]byte(c))
+	var err error
+	config, err = parseConfig([]byte(c))
+	if err != nil {
+		t.Fatalf("parseConfig failed: %v", err)
+	}
 	return tmpDir
 }
 

@@ -60,7 +60,7 @@ func TestGetCurrentURLs(t *testing.T) {
 
 	require.NoError(t, os.WriteFile(tmpMirrorfile, []byte(mirrorlist), 0o644))
 
-	config := parseConfig([]byte(`
+	config, err := parseConfig([]byte(`
 cache_dir: ` + temp + `
 purge_files_after: 2592000 # 3600 * 24 * 30days
 download_timeout: 200
@@ -70,6 +70,7 @@ repos:
     mirrorlist: ` + tmpMirrorfile + `
 
 `))
+	require.NoError(t, err)
 	archTest := config.Repos["archTest"]
 	require.Equal(t, expectedURLs, archTest.getUrls())
 
@@ -86,12 +87,13 @@ func TestEmptyMirrorlist(t *testing.T) {
 
 	require.NoError(t, os.WriteFile(tmpMirrorfile, []byte(""), 0o644))
 
-	config := parseConfig([]byte(`
+	config, err := parseConfig([]byte(`
 cache_dir: ` + temp + `
 repos:
   archTest:
     mirrorlist: ` + tmpMirrorfile + `
 `))
+	require.NoError(t, err)
 	archTest := config.Repos["archTest"]
 	urls, err := archTest.getMirrorlistURLs()
 	require.Error(t, err)

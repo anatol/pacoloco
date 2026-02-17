@@ -100,7 +100,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	config = parseConfig(yaml)
+	config, err = parseConfig(yaml)
+	if err != nil {
+		log.Fatal(err)
+	}
 	if config.LogTimestamp == true {
 		log.SetFlags(log.LstdFlags)
 	}

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"fmt"
 	"os"
 	"sync"
 	"time"
@@ -57,7 +57,7 @@ type Config struct {
 
 var config *Config
 
-func parseConfig(raw []byte) *Config {
+func parseConfig(raw []byte) (*Config, error) {
 	result := Config{
 		CacheDir: DefaultCacheDir,
 		Address:  DefaultAddress,
@@ -67,35 +67,35 @@ func parseConfig(raw []byte) *Config {
 	}
 
 	if err := yaml.Unmarshal(raw, &result); err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	// validate config
 	for name, repo := range result.Repos {
 		if repo.URL != "" && len(repo.URLs) > 0 {
-			log.Fatalf("repo '%v' specifies both url and urls parameters, please use only one of them", name)
+			return nil, fmt.Errorf("repo '%v' specifies both url and urls parameters, please use only one of them", name)
 		}
 		if repo.URL != "" && repo.Mirrorlist != "" {
-			log.Fatalf("repo '%v' specifies both url and mirrorlist parameter, please use only one of them", name)
+			return nil, fmt.Errorf("repo '%v' specifies both url and mirrorlist parameter, please use only one of them", name)
 		}
 		if len(repo.URLs) > 0 && repo.Mirrorlist != "" {
-			log.Fatalf("repo '%v' specifies both urls and mirrorlist parameter, please use only one of them", name)
+			return nil, fmt.Errorf("repo '%v' specifies both urls and mirrorlist parameter, please use only one of them", name)
 		}
 		if repo.URL == "" && len(repo.URLs) == 0 && repo.Mirrorlist == "" {
-			log.Fatalf("please specify url(s) or mirrorlist for repo '%v'", name)
+			return nil, fmt.Errorf("please specify url(s) or mirrorlist for repo '%v'", name)
 		}
 		// validate Mirrorlist config
 		if repo.Mirrorlist != "" && unix.Access(repo.Mirrorlist, unix.R_OK) != nil {
-			log.Fatalf("mirrorlist file %v for repo %v does not exist or isn't readable for userid %v", repo.Mirrorlist, name, os.Getuid())
+			return nil, fmt.Errorf("mirrorlist file %v for repo %v does not exist or isn't readable for userid %v", repo.Mirrorlist, name, os.Getuid())
 		}
 	}
 
 	if result.PurgeFilesAfter < 10*60 && result.PurgeFilesAfter != 0 {
-		log.Fatalf("'purge_files_after' period is too low (%v) please specify at least 10 minutes", result.PurgeFilesAfter)
+		return nil, fmt.Errorf("'purge_files_after' period is too low (%v) please specify at least 10 minutes", result.PurgeFilesAfter)
 	}
 
 	if unix.Access(result.CacheDir, unix.R_OK|unix.W_OK) != nil {
-		log.Fatalf("directory %v does not exist or isn't writable for userid %v", result.CacheDir, os.Getuid())
+		return nil, fmt.Errorf("directory %v does not exist or isn't writable for userid %v", result.CacheDir, os.Getuid())
 	}
 	// validate Prefetch config
 
@@ -110,23 +110,23 @@ func parseConfig(raw []byte) *Config {
 		}
 		// check Prefetch config
 		if result.Prefetch.TTLUnaccessed < 0 {
-			log.Fatal("'ttl_unaccessed_in_days' value is too low. Please set it to a value greater than 0")
+			return nil, fmt.Errorf("'ttl_unaccessed_in_days' value is too low. Please set it to a value greater than 0")
 		}
 		if result.Prefetch.TTLUnupdated < 0 {
-			log.Fatal("'ttl_unupdated_in_days' value is too low. Please set it to a value greater than 0")
+			return nil, fmt.Errorf("'ttl_unupdated_in_days' value is too low. Please set it to a value greater than 0")
 		}
 		if _, err := cronexpr.Parse(result.Prefetch.Cron); err != nil {
-			log.Fatal("Invalid cron string (if you don't know how to compose them, there are many online utilities for doing so). Please check https://github.com/gorhill/cronexpr#implementation for documentation.")
+			return nil, fmt.Errorf("invalid cron string (if you don't know how to compose them, there are many online utilities for doing so). Please check https://github.com/gorhill/cronexpr#implementation for documentation")
 		}
 	}
 
 	if result.Tls != nil {
 		if unix.Access(result.Tls.Certificate, unix.R_OK) != nil {
-			log.Fatalf("tls cert file %v does not exist or isn't readable for userid %v", result.Tls.Certificate, os.Getuid())
+			return nil, fmt.Errorf("tls cert file %v does not exist or isn't readable for userid %v", result.Tls.Certificate, os.Getuid())
 		}
 		if unix.Access(result.Tls.Key, unix.R_OK) != nil {
-			log.Fatalf("tls key file %v does not exist or isn't readable for userid %v", result.Tls.Key, os.Getuid())
+			return nil, fmt.Errorf("tls key file %v does not exist or isn't readable for userid %v", result.Tls.Key, os.Getuid())
 		}
 	}
-	return &result
+	return &result, nil
 }
