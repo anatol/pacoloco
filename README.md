@@ -107,7 +107,15 @@ Optionally you can build the binary from sources using `go build` command.
 
 ## Configure
 
-The server configuration is located at `/etc/pacoloco.yaml`. Here is an example how the config file looks like:
+The server configuration default location is `/etc/pacoloco.yaml`.
+
+Changing the config file location can be done with the `--config` argument when launching pacoloco, like this:
+
+```sh
+$ pacoloco --config /some/location/config.yaml
+```
+
+Here is an example how the config file looks like:
 
 ```yaml
 port: 9129

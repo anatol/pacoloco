@@ -1,6 +1,14 @@
 # Configuration Reference
 
-Pacoloco is configured via a YAML file located at `/etc/pacoloco.yaml`.
+Pacoloco is configured via a YAML file.
+
+The default location of the config file is `/etc/pacoloco.yaml`.
+
+Changing the config file location can be done with the `--config` argument when launching pacoloco, like this:
+
+```sh
+$ pacoloco --config /some/location/config.yaml
+```
 
 ## General Settings
 
