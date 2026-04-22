@@ -61,7 +61,6 @@ spec:
           volumeMounts:
             - name: configfile
               mountPath: /etc/pacoloco
-              #subPath: pacoloco.yaml
             - name: data
               mountPath: /var/cache/pacoloco
           {{- with .Values.volumeMounts }}
