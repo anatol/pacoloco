@@ -10,6 +10,8 @@ persistence:
   size: 20Gi
   storageClass: null
 
+existingConfigurationConfigMap: ""
+
 configuration:
   # default configuration from here: https://github.com/anatol/pacoloco#configure
   address:
@@ -18,17 +20,16 @@ configuration:
   cache_dir: /var/cache/pacoloco
   download_timeout: 3600
   purge_files_after: 2592000 ## purge file after 30 days
-  repos:
-    archlinux:
-      urls:
-        - http://mirror.lty.me/archlinux
-        - http://mirrors.kernel.org/archlinux
+  repos: {}
+    #archlinux:
+    #  urls:
+    #    - http://mirror.lty.me/archlinux
+    #    - http://mirrors.kernel.org/archlinux
     #archlinux-reflector:
     #  mirrorlist: /etc/pacman.d/mirrorlist
   prefetch: ## optional section, add it if you want to enable prefetching
-   cron: 0 0 3 * * * * ## standard cron expression (https://en.wikipedia.org/wiki/Cron#CRON_expression) to define how frequently prefetch, see https://github.com/gorhill/cronexpr#implementation for documentation.
-   ttl_unaccessed_in_days: 30
-
+    cron: 0 0 3 * * * * ## standard cron expression (https://en.wikipedia.org/wiki/Cron#CRON_expression) to define how frequently prefetch, see https://github.com/gorhill/cronexpr#implementation for documentation.
+    ttl_unaccessed_in_days: 30
 
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
@@ -108,18 +109,18 @@ httpRoute:
   annotations: {}
   # Which Gateways this Route is attached to.
   parentRefs:
-  - name: gateway
-    sectionName: http
-    # namespace: default
+    - name: gateway
+      sectionName: http
+      # namespace: default
   # Hostnames matching HTTP header.
   hostnames:
-  - chart-example.local
+    - chart-example.local
   # List of rules and filters applied.
   rules:
-  - matches:
-    - path:
-        type: PathPrefix
-        value: /headers
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /headers
   #   filters:
   #   - type: RequestHeaderModifier
   #     requestHeaderModifier:

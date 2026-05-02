@@ -72,10 +72,11 @@ spec:
             claimName: {{ include "pacoloco.fullname" . }}-data
         - name: configfile
           configMap:
+            {{- if .Values.existingConfigurationConfigMap }}
+            name: {{ .Values.existingConfigurationConfigMap }}
+            {{- else }}
             name: {{ include "pacoloco.fullname" . }}-config
-            #items:
-            #  - key: pacoloco.yaml
-            #    path: pacoloco.yaml
+            {{- end }}
       {{- with .Values.volumes }}
         {{- toYaml . | nindent 8 }}
       {{- end }}

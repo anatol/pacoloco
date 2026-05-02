@@ -1,3 +1,4 @@
+{{- if not .Values.existingConfigurationConfigMap }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -7,3 +8,4 @@ metadata:
 data:
   pacoloco.yaml: |
 {{ toYaml .Values.configuration | indent 4 }}
+{{- end }}
