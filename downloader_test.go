@@ -10,7 +10,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -177,6 +179,122 @@ func TestDownloadNotModified(t *testing.T) {
 	require.NoError(t, err)
 	// Should serve from cache (304 means use cached version)
 	require.Equal(t, http.StatusOK, w.Code)
+}
+
+// TestConcurrentForceCheckRequests is a regression test for a race in the
+// Downloader lifecycle: releasing the last reference used to decide on
+// cleanup outside downloadersMutex, so a client attaching to the Downloader
+// at that moment could read from an already-closed buffer file, and a stale
+// cleanup could delete the map entry and buffer file of a freshly created
+// Downloader for the same key.
+//
+// Files that force an upstream check (.db) create a short-lived Downloader
+// on every request even when cached, so hammering one such path from many
+// goroutines exercises the attach/release window continuously.
+func TestConcurrentForceCheckRequests(t *testing.T) {
+	content := "pacoloco test db content"
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Last-Modified", time.Now().UTC().Format(http.TimeFormat))
+		w.Header().Set("Content-Length", strconv.Itoa(len(content)))
+		_, _ = w.Write([]byte(content))
+	}
+	mirror := httptest.NewServer(http.HandlerFunc(handler))
+	defer mirror.Close()
+
+	config = &Config{
+		CacheDir:        t.TempDir(),
+		Port:            -1,
+		DownloadTimeout: 10,
+		Repos:           map[string]*Repo{"race-repo": {URL: mirror.URL}},
+	}
+
+	const (
+		clients           = 32
+		requestsPerClient = 64
+	)
+
+	errCh := make(chan error, clients)
+	var wg sync.WaitGroup
+	for range clients {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range requestsPerClient {
+				req := httptest.NewRequest(http.MethodGet, "/repo/race-repo/test.db", nil)
+				w := httptest.NewRecorder()
+				if err := handleRequest(w, req); err != nil {
+					errCh <- fmt.Errorf("handleRequest: %w", err)
+					return
+				}
+				if body := w.Body.String(); body != content {
+					errCh <- fmt.Errorf("got body %q, want %q", body, content)
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		require.NoError(t, err)
+	}
+}
+
+// TestConcurrentDownloadsShareUpstreamRequest verifies the single-flight
+// behavior: concurrent clients of one uncached file must share a single
+// upstream download and each receive the complete content.
+func TestConcurrentDownloadsShareUpstreamRequest(t *testing.T) {
+	content := strings.Repeat("pacoloco", 128*1024) // 1 MiB
+
+	var upstreamHits atomic.Int32
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		upstreamHits.Add(1)
+		w.Header().Set("Last-Modified", time.Now().UTC().Format(http.TimeFormat))
+		w.Header().Set("Content-Length", strconv.Itoa(len(content)))
+		// Trickle the body so every client attaches while the download
+		// is still in flight.
+		half := len(content) / 2
+		_, _ = w.Write([]byte(content[:half]))
+		w.(http.Flusher).Flush()
+		time.Sleep(300 * time.Millisecond)
+		_, _ = w.Write([]byte(content[half:]))
+	}
+	mirror := httptest.NewServer(http.HandlerFunc(handler))
+	defer mirror.Close()
+
+	config = &Config{
+		CacheDir:        t.TempDir(),
+		Port:            -1,
+		DownloadTimeout: 10,
+		Repos:           map[string]*Repo{"flight-repo": {URL: mirror.URL}},
+	}
+
+	const clients = 16
+
+	errCh := make(chan error, clients)
+	var wg sync.WaitGroup
+	for range clients {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			req := httptest.NewRequest(http.MethodGet, "/repo/flight-repo/pkg-1-1-any.pkg.tar.zst", nil)
+			w := httptest.NewRecorder()
+			if err := handleRequest(w, req); err != nil {
+				errCh <- fmt.Errorf("handleRequest: %w", err)
+				return
+			}
+			if body := w.Body.String(); body != content {
+				errCh <- fmt.Errorf("got %d bytes, want %d", len(body), len(content))
+			}
+		}()
+	}
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		require.NoError(t, err)
+	}
+	require.Equal(t, int32(1), upstreamHits.Load(),
+		"concurrent clients must share one upstream download")
 }
 
 func TestParseRequestURLInvalid(t *testing.T) {
