@@ -1,0 +1,13 @@
+# Keep the build context down to what the Dockerfile actually copies
+# (go.mod, go.sum, *.go); everything else only slows context upload and
+# invalidates nothing.
+.git
+.github
+docs
+helm
+*.md
+LICENSE
+pacoloco.service
+pacoloco.sysusers.d
+pacoloco.tmpfiles.d
+pacoloco.yaml.sample

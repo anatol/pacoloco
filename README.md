@@ -70,13 +70,19 @@ $ docker run -p 9129:9129 \
 ```
 You need to provide paths or volumes to store application data.
 
+The container runs as the non-root user `65532` by default. When
+bind-mounting a host directory for the cache, make it writable for that
+uid (`chown 65532:65532 /path/to/cache`) or override the user with
+`--user "$(id -u):$(id -g)"`.
+
 Alternatively, you can use docker-compose:
 ```yaml
 ---
 services:
   pacoloco:
-#   if a specific user id is provided, you have to make sure
-#   the mounted directories have the same user id owner on host
+#   the image runs as uid/gid 65532 by default; if another user id is
+#   provided, you have to make sure the mounted directories have the same
+#   user id owner on host
 #   user: 1000:1000
     container_name: pacoloco
 #   to pull the image from github's registry:
@@ -93,6 +99,11 @@ services:
 #    environment:
 #      - TZ=Europe/Berlin
 ```
+
+
+See the [chart documentation](helm/pacoloco/README.md) for persistence,
+Ingress/Gateway API exposure, Prometheus monitoring and the full values
+reference.
 
 ## Build from sources
 
