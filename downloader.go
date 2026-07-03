@@ -283,14 +283,20 @@ func (d *DownloadReader) Close() error {
 }
 
 func (d *DownloadReader) Read(p []byte) (int, error) {
-	d.downloader.eventCond.L.Lock()
-	for !(d.downloader.eventDataReceivedSize > d.offset || d.downloader.eventDone) {
-		d.downloader.eventCond.Wait()
+	// Snapshot the streaming state under the lock: the download goroutine
+	// keeps mutating eventDataReceivedSize (and eventually eventDone)
+	// concurrently, so they must not be re-read after unlocking.
+	dl := d.downloader
+	dl.eventCond.L.Lock()
+	for !(dl.eventDataReceivedSize > d.offset || dl.eventDone) {
+		dl.eventCond.Wait()
 	}
-	d.downloader.eventCond.L.Unlock()
+	received := dl.eventDataReceivedSize
+	done := dl.eventDone
+	dl.eventCond.L.Unlock()
 
-	if d.downloader.eventDataReceivedSize > d.offset {
-		n, err := d.downloader.bufferFile.ReadAt(p, int64(d.offset))
+	if received > d.offset {
+		n, err := dl.bufferFile.ReadAt(p, int64(d.offset))
 		d.offset += n
 		if err == io.EOF {
 			// EOF on the bufferFile does not mean that we are done downloading
@@ -298,7 +304,7 @@ func (d *DownloadReader) Read(p []byte) (int, error) {
 			err = nil
 		}
 		return n, err
-	} else if d.downloader.eventDone {
+	} else if done {
 		return 0, io.EOF
 	}
 

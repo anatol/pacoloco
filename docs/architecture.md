@@ -122,7 +122,7 @@ The downloader subsystem (`downloader.go`) is the core data path. It uses `sync.
 
 5. **`DownloadReader`** -- Implements `io.ReadSeekCloser` to provide a streaming interface. Multiple HTTP response writers can read from the same download concurrently, each tracking their own read position while the background goroutine writes ahead.
 
-6. **Cleanup** -- An atomic `usageCount` tracks the number of active readers. When the last reader closes, the `Downloader` is removed from the active downloads map.
+6. **Cleanup** -- A `usageCount` guarded by `downloadersMutex` tracks the number of active readers. When the last reader closes, the `Downloader` is removed from the active downloads map and its buffer file is deleted, atomically with respect to new readers attaching.
 
 ## 7. Configuration
 
