@@ -167,16 +167,17 @@ jobs:
           platforms: ${{ env.PLATFORM }}
           outputs: type=cacheonly
 
-  # Publish-only leg: never runs for PRs or manual test runs, so the
-  # packages: write token only exists for push-triggered release paths.
+  # Runs on every event so PRs and manual runs prove the release image
+  # still builds; digests are pushed only on push events, and only after
+  # the whole test matrix is green (needs: test).
   build:
     name: build (${{ matrix.platform }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 40
-    if: github.event_name == 'push'
     needs:
       - test
     # Least-privilege token: pushing images to ghcr.io needs packages: write.
+    # PR runs never login or push; fork PR tokens are read-only regardless.
     permissions:
       contents: read
       packages: write
@@ -216,15 +217,27 @@ jobs:
           images: ${{ env.IMAGE_REF }}
 
       - name: Login to Container Registry
+        if: github.event_name == 'push'
         uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Go build cache (read-only)
+        if: github.event_name != 'push'
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ env.GO_CACHE_DIR }}
+          key: >-
+            go-build-${{ env.PLATFORM_PAIR }}-${{
+            hashFiles('go.mod', 'go.sum', '**/*.go') }}
+          restore-keys: |
+            go-build-${{ env.PLATFORM_PAIR }}-
+
       - name: Go build cache
         id: go-cache
-        if: github.ref_type == 'branch'
+        if: github.event_name == 'push' && github.ref_type == 'branch'
         uses: actions/cache@v6
         with:
           path: ${{ env.GO_CACHE_DIR }}
@@ -235,18 +248,32 @@ jobs:
             go-build-${{ env.PLATFORM_PAIR }}-
 
       - name: Inject go-build cache into BuildKit
-        if: github.ref_type == 'branch'
+        if: github.event_name != 'push' || github.ref_type == 'branch'
         uses: reproducible-containers/buildkit-cache-dance@v3
         with:
           cache-map: |
             {
               "${{ env.GO_CACHE_DIR }}": "/root/.cache/go-build"
             }
-          skip-extraction: ${{ steps.go-cache.outputs.cache-hit == 'true' }}
+          skip-extraction: >-
+            ${{ steps.go-cache.outputs.cache-hit == 'true'
+            || github.event_name != 'push' }}
+
+      - name: Build image (no push)
+        if: github.event_name != 'push'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: ${{ env.PLATFORM }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=cacheonly
+          cache-from: |
+            type=gha,scope=${{ env.REGISTRY }}-${{ github.ref_name }}-${{ env.PLATFORM_PAIR }}
+            type=gha,scope=${{ env.REGISTRY }}-${{ env.DEFAULT_BRANCH }}-${{ env.PLATFORM_PAIR }}
 
       - name: Build and push by digest
         id: build_branch
-        if: github.ref_type == 'branch'
+        if: github.event_name == 'push' && github.ref_type == 'branch'
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -265,7 +292,7 @@ jobs:
 
       - name: Build and push by digest (no cache)
         id: build_tag
-        if: github.ref_type == 'tag'
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -277,6 +304,7 @@ jobs:
           outputs: type=image,name=${{ env.IMAGE_REF }},push-by-digest=true,name-canonical=true,push=true
 
       - name: Export digest
+        if: github.event_name == 'push'
         env:
           DIGEST: ${{ steps.build_branch.outputs.digest || steps.build_tag.outputs.digest }}
         run: |
@@ -284,6 +312,7 @@ jobs:
           touch "${DIGESTS_DIR}/${DIGEST#sha256:}"
 
       - name: Upload digest
+        if: github.event_name == 'push'
         uses: actions/upload-artifact@v7
         with:
           name: digests-${{ env.PLATFORM_PAIR }}
