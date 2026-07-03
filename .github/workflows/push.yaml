@@ -11,6 +11,16 @@ on:
       - 'Dockerfile'
       - '.github/workflows/push.yaml'
 
+# Newer pushes to the same branch supersede in-flight builds.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least-privilege token: pushing images to ghcr.io needs packages: write.
+permissions:
+  contents: read
+  packages: write
+
 env:
   PLATFORMS: |-
     linux/amd64
@@ -28,11 +38,11 @@ jobs:
       - id: generate-matrix
         shell: bash
         run: |
-          echo -n "matrix=" >> $GITHUB_OUTPUT
+          echo -n "matrix=" >> "$GITHUB_OUTPUT"
           # Output a JSON list containing all PLATFORMS
           echo "${{ env.PLATFORMS }}" | \
             jq -R -c '[{ platform: . }]' | \
-            jq -n '{ platforms: [ [inputs[0].platform] ] | add}.platforms' -c >> $GITHUB_OUTPUT
+            jq -n '{ platforms: [ [inputs[0].platform] ] | add}.platforms' -c >> "$GITHUB_OUTPUT"
 
   test:
     needs:
@@ -44,26 +54,54 @@ jobs:
         platform: ${{ fromJSON(needs.generate-matrix.outputs.matrix) }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
+        uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v4
+
+      # Persist the Dockerfile's /root/.cache/go-build cache mount across CI
+      # runs. The GHA layer cache below only replays fully unchanged layers;
+      # this keeps compilation incremental when the source *does* change.
+      # The same key is shared with the build job (test runs first and saves,
+      # build gets an exact hit and skips re-saving).
+      - name: Go build cache
+        id: go-cache
+        uses: actions/cache@v6
+        with:
+          path: go-build-cache
+          key: go-build-cache-${{ matrix.platform }}-${{ hashFiles('**/go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-build-cache-${{ matrix.platform }}-${{ hashFiles('**/go.sum') }}-
+            go-build-cache-${{ matrix.platform }}-
+
+      - name: Inject go-build cache into BuildKit
+        uses: reproducible-containers/buildkit-cache-dance@v3
+        with:
+          cache-map: |
+            {
+              "go-build-cache": "/root/.cache/go-build"
+            }
+          skip-extraction: ${{ steps.go-cache.outputs.cache-hit }}
 
       - name: Run tests
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v7
         with:
           context: .
           target: test
           push: false
           platforms: ${{ matrix.platform }}
-          # Enable cache to speed up builds
-          # Scope is to ensure that images don't overwrite each other's cache
           outputs: type=cacheonly
-          cache-from: type=gha,scope=${{ env.REGISTRY }}-${{ github.ref_name }}-${{ matrix.platform }}-tests
-          cache-to: type=gha,mode=max,scope=${{ env.REGISTRY }}-${{ github.ref_name }}-${{ matrix.platform }}-tests
+          # One layer-cache scope per branch and platform, shared between the
+          # test and build jobs so the build job reuses the common stage
+          # layers the test job already produced. The default-branch scope is
+          # the read fallback for freshly created branches.
+          cache-from: |
+            type=gha,scope=${{ env.REGISTRY }}-${{ github.ref_name }}-${{ matrix.platform }}
+            type=gha,scope=${{ env.REGISTRY }}-${{ github.event.repository.default_branch }}-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=${{ env.REGISTRY }}-${{ github.ref_name }}-${{ matrix.platform }}
 
   build:
     runs-on: ubuntu-latest
@@ -77,47 +115,66 @@ jobs:
       - test
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
 
       # Spec requires ref to be lowercase, but
       # user/org/repo name may have mixed case
       - name: Sanitize image ref
-        uses: ASzc/change-string-case-action@v6
         id: ref
-        with:
-          string: ${{ env.REGISTRY }}/${{ env.IMAGE }}
+        env:
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE }}
+        run: echo "lowercase=${IMAGE_REF,,}" >> "$GITHUB_OUTPUT"
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE }}
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
+        uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v4
 
       - name: Login to Container Registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Go build cache
+        id: go-cache
+        uses: actions/cache@v6
+        with:
+          path: go-build-cache
+          key: go-build-cache-${{ matrix.platform }}-${{ hashFiles('**/go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-build-cache-${{ matrix.platform }}-${{ hashFiles('**/go.sum') }}-
+            go-build-cache-${{ matrix.platform }}-
+
+      - name: Inject go-build cache into BuildKit
+        uses: reproducible-containers/buildkit-cache-dance@v3
+        with:
+          cache-map: |
+            {
+              "go-build-cache": "/root/.cache/go-build"
+            }
+          skip-extraction: ${{ steps.go-cache.outputs.cache-hit }}
+
       - name: Build and push by digest
         id: build
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ steps.ref.outputs.lowercase }},push-by-digest=true,name-canonical=true,push=true
-          # Enable cache to speed up builds
-          # Scope is to ensure that images don't overwrite each other's cache
-          cache-from: type=gha,scope=${{ env.REGISTRY }}-${{ github.ref_name }}-${{ matrix.platform }}-executable
-          cache-to: type=gha,mode=max,scope=${{ env.REGISTRY }}-${{ github.ref_name }}-${{ matrix.platform }}-executable
+          cache-from: |
+            type=gha,scope=${{ env.REGISTRY }}-${{ github.ref_name }}-${{ matrix.platform }}
+            type=gha,scope=${{ env.REGISTRY }}-${{ github.event.repository.default_branch }}-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=${{ env.REGISTRY }}-${{ github.ref_name }}-${{ matrix.platform }}
 
       - name: Export digest
         run: |
@@ -126,16 +183,15 @@ jobs:
           touch "/tmp/digests/${digest#sha256:}"
           PLATFORM=${{ matrix.platform }}
           # Replace slashes in platform name with dashes
-          echo "PLATFORM_ARTIFACT=${PLATFORM//\//-}" >> $GITHUB_ENV
+          echo "PLATFORM_ARTIFACT=${PLATFORM//\//-}" >> "$GITHUB_ENV"
 
       - name: Upload digest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: digests-${{ env.PLATFORM_ARTIFACT }}
           path: /tmp/digests/*
           if-no-files-found: error
           retention-days: 1
-
 
   merge_and_publish:
     runs-on: ubuntu-latest
@@ -144,26 +200,26 @@ jobs:
 
     steps:
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: digests-*
           merge-multiple: true
           path: /tmp/digests
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v4
 
       # Spec requires ref to be lowercase, but
       # user/org/repo name may have mixed case
       - name: Sanitize image ref
-        uses: ASzc/change-string-case-action@v6
         id: ref
-        with:
-          string: ${{ env.REGISTRY }}/${{ env.IMAGE }}
+        env:
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE }}
+        run: echo "lowercase=${IMAGE_REF,,}" >> "$GITHUB_OUTPUT"
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE }}
           tags: |
@@ -178,7 +234,7 @@ jobs:
             latest=false
 
       - name: Login to Container Registry
-        uses: docker/login-action@v2
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -187,6 +243,9 @@ jobs:
       - name: Create manifest list and push
         working-directory: /tmp/digests
         run: |
+          # Word splitting is intentional: expands to multiple `-t <tag>`
+          # flags and one digest ref per file.
+          # shellcheck disable=SC2046
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
             $(printf '${{ steps.ref.outputs.lowercase }}@sha256:%s ' *)
 

@@ -100,11 +100,6 @@ services:
 #      - TZ=Europe/Berlin
 ```
 
-
-See the [chart documentation](helm/pacoloco/README.md) for persistence,
-Ingress/Gateway API exposure, Prometheus monitoring and the full values
-reference.
-
 ## Build from sources
 
 Requires Go 1.25.0 or later.
