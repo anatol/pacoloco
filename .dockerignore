@@ -1,6 +1,5 @@
-# Keep the build context down to what the Dockerfile actually copies
-# (go.mod, go.sum, *.go); everything else only slows context upload and
-# invalidates nothing.
+# Keep the build context down to source needed by the Dockerfile; everything
+# else only slows context upload and invalidates nothing.
 .git
 .github
 docs

@@ -6,9 +6,37 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    # Wait out fresh releases so yanked/compromised versions never land.
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+    groups:
+      github-actions:
+        patterns:
+          - "*"
 
   # Keeps the digest-pinned base images in the Dockerfile current.
   - package-ecosystem: docker
     directory: "/"
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+    groups:
+      docker-images:
+        patterns:
+          - "*"
+
+  # Keeps Go module dependencies in go.mod/go.sum current.
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+    groups:
+      go-modules:
+        patterns:
+          - "*"

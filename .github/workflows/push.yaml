@@ -3,139 +3,217 @@ name: Build and push to ghcr.io
 
 on:
   workflow_dispatch:
-  push:
+  # PRs (including forks) get the read-only test leg: nothing is pushed,
+  # no cache is written.
+  pull_request:
     paths:
       - '**.go'
-      - 'go.sum'
       - 'go.mod'
+      - 'go.sum'
+      - 'Dockerfile'
+      - '.github/workflows/push.yaml'
+  push:
+    # Branch pushes are covered by pull_request; only master and numeric
+    # release tags publish images. Paths filters do not apply to tag pushes.
+    branches:
+      - master
+    tags:
+      - '[0-9]*'
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
       - 'Dockerfile'
       - '.github/workflows/push.yaml'
 
 # Newer pushes to the same branch supersede in-flight builds.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
-# Least-privilege token: pushing images to ghcr.io needs packages: write.
 permissions:
   contents: read
-  packages: write
+
+# Explicit bash adds `-o pipefail` to the implicit `-e`.
+defaults:
+  run:
+    shell: bash
 
 env:
-  PLATFORMS: |-
-    linux/amd64
-    linux/arm64
-    linux/arm/v7
   REGISTRY: ghcr.io
-  IMAGE: ${{ github.repository }}
+  DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+  GO_CACHE_DIR: go-build-cache
+  DIGESTS_DIR: /tmp/digests
+  ARM32_PROBE_IMAGE: alpine:3.24
 
 jobs:
-  generate-matrix:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.generate-matrix.outputs.matrix }}
-    steps:
-      - id: generate-matrix
-        shell: bash
-        run: |
-          echo -n "matrix=" >> "$GITHUB_OUTPUT"
-          # Output a JSON list containing all PLATFORMS
-          echo "${{ env.PLATFORMS }}" | \
-            jq -R -c '[{ platform: . }]' | \
-            jq -n '{ platforms: [ [inputs[0].platform] ] | add}.platforms' -c >> "$GITHUB_OUTPUT"
-
+  # Runs natively on per-platform runners. arm/v7 runs on the arm64
+  # runner because 32-bit arm userspace executes natively on AArch64
+  # kernels; QEMU is only a probe-triggered fallback.
   test:
-    needs:
-      - generate-matrix
-    runs-on: ubuntu-latest
-    strategy:
-      # Use matrix to speed up tests
+    name: test (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    # Runner labels live only here: bump the two &runner-* anchors to
+    # move every job to a new Ubuntu version.
+    strategy: &platform-matrix
+      # Use matrix to speed up tests and builds.
+      fail-fast: false
       matrix:
-        platform: ${{ fromJSON(needs.generate-matrix.outputs.matrix) }}
-
+        include:
+          - platform: linux/amd64
+            runner: &runner-amd64 ubuntu-24.04
+          - platform: linux/arm64
+            runner: &runner-arm ubuntu-24.04-arm
+          - platform: linux/arm/v7
+            runner: *runner-arm
+    env: &platform-env
+      PLATFORM: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
-      - name: Set up QEMU
+      - name: Sanitize platform name
+        # Replace slashes in platform name with dashes.
+        run: echo "PLATFORM_PAIR=${PLATFORM//\//-}" >> "$GITHUB_ENV"
+
+      - name: Verify native 32-bit execution
+        id: arm32-probe
+        if: env.PLATFORM == 'linux/arm/v7'
+        continue-on-error: true
+        run: docker run --rm --platform "$PLATFORM" "$ARM32_PROBE_IMAGE" uname -m
+
+      - name: Set up QEMU (arm/v7 fallback)
+        if: steps.arm32-probe.outcome == 'failure'
         uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
       # Persist the Dockerfile's /root/.cache/go-build cache mount across CI
-      # runs. The GHA layer cache below only replays fully unchanged layers;
-      # this keeps compilation incremental when the source *does* change.
-      # The same key is shared with the build job (test runs first and saves,
-      # build gets an exact hit and skips re-saving).
+      # runs. PRs and manual runs restore but never save: restored caches are
+      # untrusted input, and non-publish saves only burn quota.
+      - name: Go build cache (read-only)
+        if: github.event_name != 'push'
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ env.GO_CACHE_DIR }}
+          key: >-
+            go-build-${{ env.PLATFORM_PAIR }}-${{
+            hashFiles('go.mod', 'go.sum', '**/*.go') }}
+          restore-keys: |
+            go-build-${{ env.PLATFORM_PAIR }}-
+
       - name: Go build cache
         id: go-cache
+        if: github.event_name == 'push' && github.ref_type == 'branch'
         uses: actions/cache@v6
         with:
-          path: go-build-cache
-          key: go-build-cache-${{ matrix.platform }}-${{ hashFiles('**/go.sum') }}-${{ github.sha }}
+          path: ${{ env.GO_CACHE_DIR }}
+          key: >-
+            go-build-${{ env.PLATFORM_PAIR }}-${{
+            hashFiles('go.mod', 'go.sum', '**/*.go') }}
           restore-keys: |
-            go-build-cache-${{ matrix.platform }}-${{ hashFiles('**/go.sum') }}-
-            go-build-cache-${{ matrix.platform }}-
+            go-build-${{ env.PLATFORM_PAIR }}-
 
       - name: Inject go-build cache into BuildKit
+        if: github.event_name != 'push' || github.ref_type == 'branch'
         uses: reproducible-containers/buildkit-cache-dance@v3
         with:
           cache-map: |
             {
-              "go-build-cache": "/root/.cache/go-build"
+              "${{ env.GO_CACHE_DIR }}": "/root/.cache/go-build"
             }
-          skip-extraction: ${{ steps.go-cache.outputs.cache-hit }}
+          skip-extraction: >-
+            ${{ steps.go-cache.outputs.cache-hit == 'true'
+            || github.event_name != 'push' }}
 
-      - name: Run tests
+      - name: Run tests (read-only cache)
+        if: github.event_name != 'push'
         uses: docker/build-push-action@v7
         with:
           context: .
           target: test
-          push: false
-          platforms: ${{ matrix.platform }}
+          platforms: ${{ env.PLATFORM }}
+          outputs: type=cacheonly
+          cache-from: |
+            type=gha,scope=${{ env.REGISTRY }}-${{ github.ref_name }}-${{ env.PLATFORM_PAIR }}
+            type=gha,scope=${{ env.REGISTRY }}-${{ env.DEFAULT_BRANCH }}-${{ env.PLATFORM_PAIR }}
+
+      - name: Run tests
+        if: github.event_name == 'push' && github.ref_type == 'branch'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: test
+          platforms: ${{ env.PLATFORM }}
           outputs: type=cacheonly
           # One layer-cache scope per branch and platform, shared between the
-          # test and build jobs so the build job reuses the common stage
-          # layers the test job already produced. The default-branch scope is
-          # the read fallback for freshly created branches.
+          # test and build jobs so the build job reuses common layers.
           cache-from: |
-            type=gha,scope=${{ env.REGISTRY }}-${{ github.ref_name }}-${{ matrix.platform }}
-            type=gha,scope=${{ env.REGISTRY }}-${{ github.event.repository.default_branch }}-${{ matrix.platform }}
-          cache-to: type=gha,mode=max,scope=${{ env.REGISTRY }}-${{ github.ref_name }}-${{ matrix.platform }}
+            type=gha,scope=${{ env.REGISTRY }}-${{ github.ref_name }}-${{ env.PLATFORM_PAIR }}
+            type=gha,scope=${{ env.REGISTRY }}-${{ env.DEFAULT_BRANCH }}-${{ env.PLATFORM_PAIR }}
+          cache-to: >-
+            type=gha,mode=max,ignore-error=true,scope=${{
+            env.REGISTRY }}-${{ github.ref_name }}-${{ env.PLATFORM_PAIR }}
 
+      - name: Run tests (no cache)
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: test
+          platforms: ${{ env.PLATFORM }}
+          outputs: type=cacheonly
+
+  # Publish-only leg: never runs for PRs or manual test runs, so the
+  # packages: write token only exists for push-triggered release paths.
   build:
-    runs-on: ubuntu-latest
-    strategy:
-      # Use matrix to speed up builds
-      matrix:
-        platform: ${{ fromJSON(needs.generate-matrix.outputs.matrix) }}
-
+    name: build (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    if: github.event_name == 'push'
     needs:
-      - generate-matrix
       - test
-
+    # Least-privilege token: pushing images to ghcr.io needs packages: write.
+    permissions:
+      contents: read
+      packages: write
+    strategy: *platform-matrix
+    env: *platform-env
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
-      # Spec requires ref to be lowercase, but
-      # user/org/repo name may have mixed case
+      - name: Sanitize platform name
+        # Replace slashes in platform name with dashes.
+        run: echo "PLATFORM_PAIR=${PLATFORM//\//-}" >> "$GITHUB_ENV"
+
+      - name: Verify native 32-bit execution
+        id: arm32-probe
+        if: env.PLATFORM == 'linux/arm/v7'
+        continue-on-error: true
+        run: docker run --rm --platform "$PLATFORM" "$ARM32_PROBE_IMAGE" uname -m
+
+      - name: Set up QEMU (arm/v7 fallback)
+        if: steps.arm32-probe.outcome == 'failure'
+        uses: docker/setup-qemu-action@v4
+
+      # Spec requires ref to be lowercase, but user/org/repo names may have
+      # mixed case.
       - name: Sanitize image ref
-        id: ref
-        env:
-          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE }}
-        run: echo "lowercase=${IMAGE_REF,,}" >> "$GITHUB_OUTPUT"
+        run: echo "IMAGE_REF=${REGISTRY}/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
 
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE }}
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+          images: ${{ env.IMAGE_REF }}
 
       - name: Login to Container Registry
         uses: docker/login-action@v4
@@ -146,82 +224,110 @@ jobs:
 
       - name: Go build cache
         id: go-cache
+        if: github.ref_type == 'branch'
         uses: actions/cache@v6
         with:
-          path: go-build-cache
-          key: go-build-cache-${{ matrix.platform }}-${{ hashFiles('**/go.sum') }}-${{ github.sha }}
+          path: ${{ env.GO_CACHE_DIR }}
+          key: >-
+            go-build-${{ env.PLATFORM_PAIR }}-${{
+            hashFiles('go.mod', 'go.sum', '**/*.go') }}
           restore-keys: |
-            go-build-cache-${{ matrix.platform }}-${{ hashFiles('**/go.sum') }}-
-            go-build-cache-${{ matrix.platform }}-
+            go-build-${{ env.PLATFORM_PAIR }}-
 
       - name: Inject go-build cache into BuildKit
+        if: github.ref_type == 'branch'
         uses: reproducible-containers/buildkit-cache-dance@v3
         with:
           cache-map: |
             {
-              "go-build-cache": "/root/.cache/go-build"
+              "${{ env.GO_CACHE_DIR }}": "/root/.cache/go-build"
             }
-          skip-extraction: ${{ steps.go-cache.outputs.cache-hit }}
+          skip-extraction: ${{ steps.go-cache.outputs.cache-hit == 'true' }}
 
       - name: Build and push by digest
-        id: build
+        id: build_branch
+        if: github.ref_type == 'branch'
         uses: docker/build-push-action@v7
         with:
           context: .
-          platforms: ${{ matrix.platform }}
+          platforms: ${{ env.PLATFORM }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,name=${{ steps.ref.outputs.lowercase }},push-by-digest=true,name-canonical=true,push=true
+          # Plain per-arch manifests keep the imagetools merge predictable;
+          # provenance is attested on the final index in merge_and_publish.
+          provenance: false
+          outputs: type=image,name=${{ env.IMAGE_REF }},push-by-digest=true,name-canonical=true,push=true
           cache-from: |
-            type=gha,scope=${{ env.REGISTRY }}-${{ github.ref_name }}-${{ matrix.platform }}
-            type=gha,scope=${{ env.REGISTRY }}-${{ github.event.repository.default_branch }}-${{ matrix.platform }}
-          cache-to: type=gha,mode=max,scope=${{ env.REGISTRY }}-${{ github.ref_name }}-${{ matrix.platform }}
+            type=gha,scope=${{ env.REGISTRY }}-${{ github.ref_name }}-${{ env.PLATFORM_PAIR }}
+            type=gha,scope=${{ env.REGISTRY }}-${{ env.DEFAULT_BRANCH }}-${{ env.PLATFORM_PAIR }}
+          cache-to: >-
+            type=gha,mode=max,ignore-error=true,scope=${{
+            env.REGISTRY }}-${{ github.ref_name }}-${{ env.PLATFORM_PAIR }}
+
+      - name: Build and push by digest (no cache)
+        id: build_tag
+        if: github.ref_type == 'tag'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: ${{ env.PLATFORM }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Plain per-arch manifests keep the imagetools merge predictable;
+          # provenance is attested on the final index in merge_and_publish.
+          provenance: false
+          outputs: type=image,name=${{ env.IMAGE_REF }},push-by-digest=true,name-canonical=true,push=true
 
       - name: Export digest
+        env:
+          DIGEST: ${{ steps.build_branch.outputs.digest || steps.build_tag.outputs.digest }}
         run: |
-          mkdir -p /tmp/digests
-          digest="${{ steps.build.outputs.digest }}"
-          touch "/tmp/digests/${digest#sha256:}"
-          PLATFORM=${{ matrix.platform }}
-          # Replace slashes in platform name with dashes
-          echo "PLATFORM_ARTIFACT=${PLATFORM//\//-}" >> "$GITHUB_ENV"
+          mkdir -p "$DIGESTS_DIR"
+          touch "${DIGESTS_DIR}/${DIGEST#sha256:}"
 
       - name: Upload digest
         uses: actions/upload-artifact@v7
         with:
-          name: digests-${{ env.PLATFORM_ARTIFACT }}
-          path: /tmp/digests/*
+          name: digests-${{ env.PLATFORM_PAIR }}
+          path: ${{ env.DIGESTS_DIR }}/*
           if-no-files-found: error
+          overwrite: true
           retention-days: 1
 
   merge_and_publish:
-    runs-on: ubuntu-latest
+    name: publish multi-arch manifest
+    runs-on: *runner-amd64
+    timeout-minutes: 15
+    if: github.event_name == 'push'
     needs:
       - build
-
+    permissions:
+      contents: read
+      # Required to push the manifest list and provenance to GHCR.
+      packages: write
+      # Required by actions/attest-build-provenance OIDC signing.
+      id-token: write
+      # Required to create GitHub artifact attestations.
+      attestations: write
     steps:
+      # Spec requires ref to be lowercase, but user/org/repo names may have
+      # mixed case.
+      - name: Sanitize image ref
+        run: echo "IMAGE_REF=${REGISTRY}/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
       - name: Download digests
         uses: actions/download-artifact@v8
         with:
           pattern: digests-*
           merge-multiple: true
-          path: /tmp/digests
+          path: ${{ env.DIGESTS_DIR }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
-
-      # Spec requires ref to be lowercase, but
-      # user/org/repo name may have mixed case
-      - name: Sanitize image ref
-        id: ref
-        env:
-          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE }}
-        run: echo "lowercase=${IMAGE_REF,,}" >> "$GITHUB_OUTPUT"
 
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE }}
+          images: ${{ env.IMAGE_REF }}
           tags: |
             # tag tags with :tag
             type=ref,event=tag
@@ -241,14 +347,34 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create manifest list and push
-        working-directory: /tmp/digests
+        working-directory: ${{ env.DIGESTS_DIR }}
         run: |
-          # Word splitting is intentional: expands to multiple `-t <tag>`
-          # flags and one digest ref per file.
-          # shellcheck disable=SC2046
-          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ steps.ref.outputs.lowercase }}@sha256:%s ' *)
+          args=()
+          while IFS= read -r tag; do
+            args+=(-t "$tag")
+          done < <(jq -r '.tags[]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          for digest in *; do
+            [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || {
+              echo "unexpected digest artifact: $digest" >&2
+              exit 1
+            }
+            args+=("${IMAGE_REF}@sha256:${digest}")
+          done
+          docker buildx imagetools create "${args[@]}"
 
       - name: Inspect image
+        id: image
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
         run: |
-          docker buildx imagetools inspect ${{ steps.ref.outputs.lowercase }}:${{ steps.meta.outputs.version }}
+          docker buildx imagetools inspect "${IMAGE_REF}:${VERSION}"
+          digest=$(docker buildx imagetools inspect "${IMAGE_REF}:${VERSION}" \
+            --format '{{.Manifest.Digest}}')
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ${{ env.IMAGE_REF }}
+          subject-digest: ${{ steps.image.outputs.digest }}
+          push-to-registry: true
