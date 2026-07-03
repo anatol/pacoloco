@@ -20,7 +20,7 @@
 # digest together (Dependabot keeps both updated).
 
 # Toolchain pinned to the Go version required by go.mod.
-FROM golang:1.25-alpine3.23@sha256:60e626bbde32def8694687d03536ea4341b19e5f068e9a630225a1dfbd0505c9 AS common
+FROM golang:1.26-alpine3.23@sha256:18b460dd17542c2ba43299a633cf6ebfc1115101509531471d7cfce1019af083 AS common
 
 # gcc/libc-dev: cgo toolchain for the sqlite driver. Package versions ride
 # the pinned base image digest instead of apk pins, which Alpine mirrors
