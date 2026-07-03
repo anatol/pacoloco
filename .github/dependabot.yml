@@ -1,0 +1,14 @@
+---
+version: 2
+updates:
+  # Keeps action majors current.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+
+  # Keeps the digest-pinned base images in the Dockerfile current.
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
