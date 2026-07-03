@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -34,7 +33,13 @@ type Downloader struct {
 	repo     *Repo
 	urlPath  string // path + filename
 
-	usageCount atomic.Int32 // number of users that keep using the Downloader
+	// usageCount is the number of active users of this Downloader: every
+	// client streaming from it plus the download goroutine itself. It is
+	// guarded by downloadersMutex: the transition to zero and the removal
+	// from downloaders must be atomic with respect to attaching in
+	// getDownloader, otherwise a client could attach to a Downloader whose
+	// buffer file is already being cleaned up.
+	usageCount int
 
 	eventCond             *sync.Cond // sync point for receiving events, such as (error, metadataReceived, dataReceived, done)
 	eventError            error
@@ -45,16 +50,19 @@ type Downloader struct {
 }
 
 func (d *Downloader) decrementUsage() {
-	val := d.usageCount.Add(-1)
+	downloadersMutex.Lock()
+	defer downloadersMutex.Unlock()
 
-	if val == 0 {
-		downloadersMutex.Lock()
-		defer downloadersMutex.Unlock()
-
-		delete(downloaders, d.key)
-		_ = d.bufferFile.Close()
-		_ = os.Remove(d.bufferFile.Name())
+	d.usageCount--
+	if d.usageCount > 0 {
+		return
 	}
+
+	// Last user: nobody can attach anymore once the Downloader is removed
+	// from the map, so releasing the buffer file here is safe.
+	delete(downloaders, d.key)
+	_ = d.bufferFile.Close()
+	_ = os.Remove(d.bufferFile.Name())
 }
 
 func (d *Downloader) download() error {
@@ -351,10 +359,10 @@ func getDownloader(f *RequestedFile) (*Downloader, error) {
 			repo:           config.Repos[f.repoName],
 			eventCond:      cond,
 		}
-		d.usageCount.Add(1) // one downloader is in use by the caller
+		d.usageCount++ // one downloader is in use by the caller
 		downloaders[key] = d
 
-		d.usageCount.Add(1) // one downloader is in use by download() function
+		d.usageCount++ // one downloader is in use by download() function
 		// start downloading the data asynchronously
 		go func() {
 			err := d.download()
@@ -371,7 +379,7 @@ func getDownloader(f *RequestedFile) (*Downloader, error) {
 			d.decrementUsage()
 		}()
 	} else {
-		d.usageCount.Add(1)
+		d.usageCount++
 	}
 
 	return d, nil
