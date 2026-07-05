@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -116,10 +117,20 @@ func gatherCacheStats(repoDir string) (totalCacheSize float64, totalPackageCount
 	return float64(size), float64(numberOfPackages), err
 }
 
+// errNotFound marks request errors that must surface as 404: malformed
+// request paths and repos missing from the config. Everything else (upstream
+// failures, disk errors) is a server-side problem and must not masquerade as
+// "no such file", both for pacman and for whoever reads the logs.
+var errNotFound = errors.New("not found")
+
 func pacolocoHandler(w http.ResponseWriter, req *http.Request) {
 	if err := handleRequest(w, req); err != nil {
 		log.Println(err)
-		w.WriteHeader(http.StatusNotFound)
+		if errors.Is(err, errNotFound) {
+			w.WriteHeader(http.StatusNotFound)
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
 	}
 }
 
@@ -196,11 +207,11 @@ func prefetchRequest(urlPath string, cachePath string) error {
 func handleRequest(w http.ResponseWriter, req *http.Request) error {
 	f, err := parseRequestURL(req.URL.Path)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %v", errNotFound, err)
 	}
 
 	if f.getRepo() == nil {
-		return fmt.Errorf("cannot find repo %s in the config file", f.repoName)
+		return fmt.Errorf("%w: cannot find repo %s in the config file", errNotFound, f.repoName)
 	}
 
 	cacheRequestsCounter.WithLabelValues(f.repoName).Inc()
@@ -222,8 +233,10 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 	} else {
 		http.ServeContent(w, req, f.fileName, modTime, r)
 		cacheMissedCounter.WithLabelValues(f.repoName).Inc()
+		// ServeContent has already written the response; returning an
+		// error here would only produce a superfluous WriteHeader call.
 		if err := r.Close(); err != nil {
-			return err
+			log.Printf("error closing download reader for %v: %v", f.key(), err)
 		}
 	}
 

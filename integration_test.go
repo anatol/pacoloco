@@ -144,13 +144,15 @@ func testRequestExistingRepo(t *testing.T) {
 	expectedRequests := testutil.ToFloat64(requestCounter) + 1
 	expectedServed := testutil.ToFloat64(servedCounter)
 	expectedMissed := testutil.ToFloat64(missedCounter)
-	expectedErrorServed := testutil.ToFloat64(cacheErrorCounter) + 1 // expected since we 404
+	expectedErrorServed := testutil.ToFloat64(cacheErrorCounter) + 1 // the download fails
 
 	req := httptest.NewRequest("GET", pacolocoURL+"/repo/repo1/test.db", nil)
 	w := httptest.NewRecorder()
 	pacolocoHandler(w, req)
 	resp := w.Result()
-	require.Equal(t, resp.StatusCode, 404)
+	// the repo exists but its upstream is unreachable: that is a server-side
+	// failure (500), not a missing file (404)
+	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 
 	actualRequests := testutil.ToFloat64(requestCounter)
 	actualServed := testutil.ToFloat64(servedCounter)
