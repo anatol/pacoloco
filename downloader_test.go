@@ -297,6 +297,121 @@ func TestConcurrentDownloadsShareUpstreamRequest(t *testing.T) {
 		"concurrent clients must share one upstream download")
 }
 
+// TestStalledDownloadAborts is a regression test for a permanent hang: with
+// download_timeout unset there was no bound on a silently stalled upstream,
+// so the download goroutine blocked forever, the Downloader stayed in the
+// downloaders map and every future client of the same file hung in
+// cond.Wait. The stall watchdog must abort such transfers: before the
+// upstream headers arrive the client gets an error, after them the abort
+// surfaces as a truncated body -- but in both cases the request finishes
+// and the Downloader is cleaned up.
+func TestStalledDownloadAborts(t *testing.T) {
+	content := "stalled content that never fully arrives"
+
+	newStallServer := func(t *testing.T, sendPrefix int) *httptest.Server {
+		release := make(chan struct{})
+		handler := func(w http.ResponseWriter, r *http.Request) {
+			if sendPrefix > 0 {
+				w.Header().Set("Content-Length", strconv.Itoa(len(content)))
+				_, _ = w.Write([]byte(content[:sendPrefix]))
+				w.(http.Flusher).Flush()
+			}
+			<-release // stall forever
+		}
+		mirror := httptest.NewServer(http.HandlerFunc(handler))
+		t.Cleanup(mirror.Close)
+		t.Cleanup(func() { close(release) }) // LIFO: runs before mirror.Close
+		return mirror
+	}
+
+	oldStall := downloadStallTimeout
+	downloadStallTimeout = 200 * time.Millisecond
+	defer func() { downloadStallTimeout = oldStall }()
+
+	run := func(t *testing.T, mirror *httptest.Server, fileName string) (*httptest.ResponseRecorder, error) {
+		config = &Config{
+			CacheDir:        t.TempDir(),
+			Port:            -1,
+			DownloadTimeout: 0, // the dangerous default: no total timeout
+			Repos:           map[string]*Repo{"stall-repo": {URL: mirror.URL}},
+		}
+
+		w := httptest.NewRecorder()
+		done := make(chan error, 1)
+		go func() {
+			req := httptest.NewRequest(http.MethodGet, "/repo/stall-repo/"+fileName, nil)
+			done <- handleRequest(w, req)
+		}()
+
+		select {
+		case err := <-done:
+			return w, err
+		case <-time.After(10 * time.Second):
+			t.Fatal("request against a stalled upstream hung instead of aborting")
+			return nil, nil
+		}
+	}
+
+	requireDownloadersCleaned := func(t *testing.T) {
+		require.Eventually(t, func() bool {
+			downloadersMutex.Lock()
+			defer downloadersMutex.Unlock()
+			return len(downloaders) == 0
+		}, time.Second, 10*time.Millisecond, "aborted Downloader must be removed from the map")
+	}
+
+	t.Run("stall before headers", func(t *testing.T) {
+		_, err := run(t, newStallServer(t, 0), "stalled-1-1-any.pkg.tar.zst")
+		require.Error(t, err, "a download stalled before headers must fail")
+		requireDownloadersCleaned(t)
+	})
+
+	t.Run("stall mid-body", func(t *testing.T) {
+		w, err := run(t, newStallServer(t, 8), "midbody-1-1-any.pkg.tar.zst")
+		// The response headers were already relayed, so the abort cannot
+		// become an HTTP error anymore; it must surface as truncation.
+		require.NoError(t, err)
+		require.Less(t, w.Body.Len(), len(content), "stalled body must be truncated, not complete")
+		requireDownloadersCleaned(t)
+	})
+}
+
+// TestStallWatchdogResetsBetweenPhases pins the per-phase semantics of the
+// stall watchdog: connecting/receiving headers and receiving the first body
+// chunk are separate phases, each with its own downloadStallTimeout budget.
+// Without the reset after the headers arrive, a server that spends most of
+// the budget before the headers and then delivers the body promptly was
+// aborted even though no single phase stalled.
+func TestStallWatchdogResetsBetweenPhases(t *testing.T) {
+	content := "slow but steady wins the race"
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(350 * time.Millisecond) // headers arrive late but in time
+		w.Header().Set("Content-Length", strconv.Itoa(len(content)))
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		time.Sleep(350 * time.Millisecond) // body arrives late but in time
+		_, _ = w.Write([]byte(content))
+	}
+	mirror := httptest.NewServer(http.HandlerFunc(handler))
+	defer mirror.Close()
+
+	oldStall := downloadStallTimeout
+	downloadStallTimeout = 500 * time.Millisecond
+	defer func() { downloadStallTimeout = oldStall }()
+
+	config = &Config{
+		CacheDir:        t.TempDir(),
+		Port:            -1,
+		DownloadTimeout: 0,
+		Repos:           map[string]*Repo{"steady-repo": {URL: mirror.URL}},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/repo/steady-repo/steady-1-1-any.pkg.tar.zst", nil)
+	w := httptest.NewRecorder()
+	require.NoError(t, handleRequest(w, req))
+	require.Equal(t, content, w.Body.String(),
+		"a download making per-phase progress must complete in full")
+}
 func TestParseRequestURLInvalid(t *testing.T) {
 	config = &Config{}
 	_, err := parseRequestURL("/invalid/path")

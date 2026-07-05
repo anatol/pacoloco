@@ -20,6 +20,14 @@ var (
 	downloadersMutex sync.Mutex
 )
 
+// downloadStallTimeout aborts a download whose upstream stops making
+// progress: connecting, returning the response headers and delivering each
+// next chunk of the body must all happen within this window. It bounds how
+// long clients can be stuck waiting on a wedged Downloader when
+// config.DownloadTimeout is unset (a variable only to allow shortening it
+// in tests).
+var downloadStallTimeout = time.Minute
+
 type Downloader struct {
 	key            string // repoName + path + filename
 	outputFileName string
@@ -95,15 +103,26 @@ func (d *Downloader) download() error {
 func (d *Downloader) downloadFromUpstream(repoURL string, proxyURL *url.URL) error {
 	upstreamURL := repoURL + d.urlPath
 
-	var req *http.Request
-	var err error
+	baseCtx := context.Background()
 	if config.DownloadTimeout > 0 {
-		ctx, ctxCancel := context.WithTimeout(context.Background(), time.Duration(config.DownloadTimeout)*time.Second)
-		defer ctxCancel()
-		req, err = http.NewRequestWithContext(ctx, http.MethodGet, upstreamURL, nil)
-	} else {
-		req, err = http.NewRequest(http.MethodGet, upstreamURL, nil)
+		var cancel context.CancelFunc
+		baseCtx, cancel = context.WithTimeout(baseCtx, time.Duration(config.DownloadTimeout)*time.Second)
+		defer cancel()
 	}
+
+	// The watchdog guards every phase of the transfer: connecting,
+	// receiving the response headers and receiving each next chunk of the
+	// body must all make progress within downloadStallTimeout, otherwise
+	// the request is cancelled. Without it a silently stalled upstream
+	// wedges this Downloader forever and every client of the file blocks
+	// in cond.Wait; config.DownloadTimeout alone does not help because it
+	// only caps the total duration and defaults to unlimited.
+	ctx, cancel := context.WithCancel(baseCtx)
+	defer cancel()
+	watchdog := time.AfterFunc(downloadStallTimeout, cancel)
+	defer watchdog.Stop()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, upstreamURL, nil)
 	if err != nil {
 		return err
 	}
@@ -134,6 +153,9 @@ func (d *Downloader) downloadFromUpstream(repoURL string, proxyURL *url.URL) err
 		return err
 	}
 	defer resp.Body.Close()
+
+	// Headers received: give the first body chunk its own full budget.
+	watchdog.Reset(downloadStallTimeout)
 
 	downloadedFilesCounter.WithLabelValues(d.repoName, req.Host, strconv.Itoa(resp.StatusCode)).Inc()
 
@@ -170,7 +192,9 @@ func (d *Downloader) downloadFromUpstream(repoURL string, proxyURL *url.URL) err
 	d.eventCond.Broadcast()
 	d.eventCond.L.Unlock()
 
-	if err := d.copyToBufferFile(resp.Body); err != nil {
+	if err := d.copyToBufferFile(resp.Body, func() {
+		watchdog.Reset(downloadStallTimeout)
+	}); err != nil {
 		return err
 	}
 
@@ -194,7 +218,10 @@ func (d *Downloader) downloadFromUpstream(repoURL string, proxyURL *url.URL) err
 	return nil
 }
 
-func (d *Downloader) copyToBufferFile(in io.ReadCloser) error {
+// copyToBufferFile streams the response body into the buffer file, calling
+// keepalive after every received chunk so the caller's stall watchdog knows
+// the transfer is making progress.
+func (d *Downloader) copyToBufferFile(in io.ReadCloser, keepalive func()) error {
 	out := d.bufferFile
 	buff := make([]byte, 1024*1024)
 
@@ -204,6 +231,8 @@ func (d *Downloader) copyToBufferFile(in io.ReadCloser) error {
 			if _, err2 := out.Write(buff[:n]); err2 != nil {
 				return err2
 			}
+			// progress means the chunk is both received and persisted
+			keepalive()
 
 			d.eventCond.L.Lock()
 			d.eventDataReceivedSize += n
