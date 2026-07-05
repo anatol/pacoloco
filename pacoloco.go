@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -86,10 +87,20 @@ func main() {
 	http.HandleFunc("/repo/", pacolocoHandler)
 	// Expose prometheus metrics
 	http.Handle("/metrics", promhttp.Handler())
+	// ReadHeaderTimeout protects against clients that open a connection and
+	// never send a request (slowloris); IdleTimeout reclaims parked
+	// keep-alive connections. Deliberately no ReadTimeout/WriteTimeout:
+	// serving a large package to a slow client is a legitimate long-running
+	// response.
+	server := &http.Server{
+		Addr:              listenAddr,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+	}
 	if config.Tls != nil {
-		err = http.ListenAndServeTLS(listenAddr, config.Tls.Certificate, config.Tls.Key, nil)
+		err = server.ListenAndServeTLS(config.Tls.Certificate, config.Tls.Key)
 	} else {
-		err = http.ListenAndServe(listenAddr, nil)
+		err = server.ListenAndServe()
 	}
 	if err != nil {
 		log.Fatal(err)
