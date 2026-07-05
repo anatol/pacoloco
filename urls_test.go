@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path"
+	"sync"
 	"testing"
 	"time"
 
@@ -113,6 +114,32 @@ repos:
 
 	gotCheckTime := archTest.LastMirrorlistCheck
 	require.LessOrEqual(t, time.Since(gotCheckTime), 3*time.Second)
+}
+
+// TestGetMirrorlistURLsConcurrent is a regression test for a data race:
+// the freshness fast path read LastMirrorlistCheck and returned r.URLs
+// without holding MirrorlistMutex, racing with a concurrent refresh that
+// writes both fields under the lock. Run with -race.
+func TestGetMirrorlistURLsConcurrent(t *testing.T) {
+	temp := t.TempDir()
+	tmpMirrorfile := path.Join(temp, "tmpMirrorFile")
+	require.NoError(t, os.WriteFile(tmpMirrorfile, []byte(mirrorlist), 0o644))
+
+	repo := &Repo{Mirrorlist: tmpMirrorfile}
+
+	var wg sync.WaitGroup
+	for range 32 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 100 {
+				repo.getUrls()
+			}
+		}()
+	}
+	wg.Wait()
+
+	require.Equal(t, expectedURLs, repo.getUrls())
 }
 
 func TestEmptyMirrorlist(t *testing.T) {

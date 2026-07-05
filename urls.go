@@ -46,14 +46,13 @@ func parseMirrorlistURLs(file *os.File) ([]string, error) {
 func (r *Repo) getMirrorlistURLs() ([]string, error) {
 	const MirrorlistCheckInterval = 5 * time.Second
 
-	if time.Since(r.LastMirrorlistCheck) < MirrorlistCheckInterval {
-		return r.URLs, nil
-	}
-
+	// The freshness check must happen under the same lock as the refresh:
+	// an unlocked read of LastMirrorlistCheck and URLs races with a
+	// concurrent refresh rewriting them (torn slice header). The critical
+	// section is cheap, so every caller simply takes the mutex.
 	r.MirrorlistMutex.Lock()
 	defer r.MirrorlistMutex.Unlock()
 
-	// Test time again in case another routine already checked in the meantime
 	if time.Since(r.LastMirrorlistCheck) < MirrorlistCheckInterval {
 		return r.URLs, nil
 	}
