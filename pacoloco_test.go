@@ -3,6 +3,8 @@ package main
 import (
 	"io"
 	"log"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 
@@ -16,6 +18,40 @@ func TestMain(m *testing.M) {
 	}
 
 	os.Exit(m.Run())
+}
+
+// TestHandlerStatusCodes verifies that only genuinely missing resources are
+// reported as 404: upstream and internal failures used to be masked as 404
+// too, which made every production incident look like a missing file.
+func TestHandlerStatusCodes(t *testing.T) {
+	mirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer mirror.Close()
+
+	config = &Config{
+		CacheDir:        t.TempDir(),
+		Port:            -1,
+		DownloadTimeout: 10,
+		Repos:           map[string]*Repo{"good-repo": {URL: mirror.URL}},
+	}
+
+	cases := []struct {
+		name string
+		url  string
+		want int
+	}{
+		{"malformed path", "/repo/", http.StatusNotFound},
+		{"unknown repo", "/repo/nope/test-1-1-any.pkg.tar.zst", http.StatusNotFound},
+		{"upstream failure", "/repo/good-repo/test-1-1-any.pkg.tar.zst", http.StatusInternalServerError},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			pacolocoHandler(w, httptest.NewRequest(http.MethodGet, tc.url, nil))
+			require.Equal(t, tc.want, w.Code)
+		})
+	}
 }
 
 func TestPathMatcher(t *testing.T) {
