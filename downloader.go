@@ -454,9 +454,14 @@ func (f *RequestedFile) getRepo() *Repo {
 	return config.Repos[f.repoName]
 }
 
-// key used for downloaders map; each active Downloader is referenced by its key
+// key used for downloaders map; each active Downloader is referenced by its
+// key. The destination path is part of the identity: the same upstream path
+// can be requested for different destinations at the same time (a client
+// filling the package cache while the prefetcher fetches the db into its
+// temporary directory), and such downloads must not share a Downloader
+// because only the creator's outputFileName receives the downloaded file.
 func (f *RequestedFile) key() string {
-	return f.repoName + f.urlPath()
+	return f.repoName + f.urlPath() + "->" + f.cachedFilePath
 }
 
 func (f *RequestedFile) urlPath() string {

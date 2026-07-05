@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -412,6 +413,55 @@ func TestStallWatchdogResetsBetweenPhases(t *testing.T) {
 	require.Equal(t, content, w.Body.String(),
 		"a download making per-phase progress must complete in full")
 }
+
+// TestPrefetchAndClientDoNotShareDownloader is a regression test for a
+// Downloader key collision: the key did not include the destination path, so
+// a prefetch downloading a db into its temporary directory and a client
+// downloading the same db into the package cache shared one Downloader --
+// and only the creator's destination received the file.
+func TestPrefetchAndClientDoNotShareDownloader(t *testing.T) {
+	content := "db content for key collision test"
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", strconv.Itoa(len(content)))
+		w.Header().Set("Last-Modified", time.Now().UTC().Format(http.TimeFormat))
+		time.Sleep(300 * time.Millisecond) // keep the download in flight
+		_, _ = w.Write([]byte(content))
+	}
+	mirror := httptest.NewServer(http.HandlerFunc(handler))
+	defer mirror.Close()
+
+	cacheDir := t.TempDir()
+	tmpDBDir := t.TempDir()
+
+	config = &Config{
+		CacheDir:        cacheDir,
+		Port:            -1,
+		DownloadTimeout: 10,
+		Repos:           map[string]*Repo{"collide-repo": {URL: mirror.URL}},
+	}
+
+	clientDone := make(chan error, 1)
+	go func() {
+		req := httptest.NewRequest(http.MethodGet, "/repo/collide-repo/core.db", nil)
+		w := httptest.NewRecorder()
+		clientDone <- handleRequest(w, req)
+	}()
+
+	// let the client create its Downloader first, then prefetch the same
+	// upstream path into a different destination while it is in flight
+	time.Sleep(50 * time.Millisecond)
+	require.NoError(t, prefetchRequest("/repo/collide-repo/core.db", tmpDBDir))
+	require.NoError(t, <-clientDone)
+
+	clientFile, err := os.ReadFile(filepath.Join(cacheDir, "pkgs", "collide-repo", "core.db"))
+	require.NoError(t, err, "client destination must receive the file")
+	require.Equal(t, content, string(clientFile))
+
+	prefetchFile, err := os.ReadFile(filepath.Join(tmpDBDir, "core.db"))
+	require.NoError(t, err, "prefetch destination must receive the file")
+	require.Equal(t, content, string(prefetchFile))
+}
+
 func TestParseRequestURLInvalid(t *testing.T) {
 	config = &Config{}
 	_, err := parseRequestURL("/invalid/path")
@@ -431,9 +481,9 @@ func TestRequestedFile(t *testing.T) {
 	data := []struct {
 		input, urlPath, key string
 	}{
-		{"/repo/noPath/foobar-3.3.6-7-x86_64.pkg.tar.zst", "/foobar-3.3.6-7-x86_64.pkg.tar.zst", "noPath/foobar-3.3.6-7-x86_64.pkg.tar.zst"},
-		{"/repo/extended/path/bar-222.pkg.tar.zst", "/path/bar-222.pkg.tar.zst", "extended/path/bar-222.pkg.tar.zst"},
-		{"/repo/upstream/extra/os/x86_64/linux-5.19.pkg.tar.zst", "/extra/os/x86_64/linux-5.19.pkg.tar.zst", "upstream/extra/os/x86_64/linux-5.19.pkg.tar.zst"},
+		{"/repo/noPath/foobar-3.3.6-7-x86_64.pkg.tar.zst", "/foobar-3.3.6-7-x86_64.pkg.tar.zst", "noPath/foobar-3.3.6-7-x86_64.pkg.tar.zst->pkgs/noPath/foobar-3.3.6-7-x86_64.pkg.tar.zst"},
+		{"/repo/extended/path/bar-222.pkg.tar.zst", "/path/bar-222.pkg.tar.zst", "extended/path/bar-222.pkg.tar.zst->pkgs/extended/bar-222.pkg.tar.zst"},
+		{"/repo/upstream/extra/os/x86_64/linux-5.19.pkg.tar.zst", "/extra/os/x86_64/linux-5.19.pkg.tar.zst", "upstream/extra/os/x86_64/linux-5.19.pkg.tar.zst->pkgs/upstream/linux-5.19.pkg.tar.zst"},
 	}
 
 	for _, d := range data {
