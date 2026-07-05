@@ -51,6 +51,28 @@ func TestPurgeWithSubdirectories(t *testing.T) {
 	require.ErrorIs(t, err, os.ErrNotExist, "nested file should be removed")
 }
 
+// TestPurgeSparesActivelyWrittenFiles ensures the purge routine does not
+// delete a file that is still being written: the buffer file of an
+// in-flight download has no readers (stale atime) but a fresh mtime, and
+// removing it would break the download streaming from it.
+func TestPurgeSparesActivelyWrittenFiles(t *testing.T) {
+	purgeFilesAfter := 3600 * 24 * 30
+	dir := t.TempDir()
+	repoDir := path.Join(dir, "pkgs", "inflightrepo")
+	require.NoError(t, os.MkdirAll(repoDir, os.ModePerm))
+
+	buffer := path.Join(repoDir, ".pkg-1-1-any.pkg.tar.zst")
+	require.NoError(t, os.WriteFile(buffer, []byte("partial download"), os.ModePerm))
+	threshold := time.Now().Add(time.Duration(-purgeFilesAfter) * time.Second)
+	// stale atime (nobody reads a buffer file), fresh mtime (writer active)
+	require.NoError(t, os.Chtimes(buffer, threshold.Add(-time.Hour), time.Now()))
+
+	purgeStaleFiles(dir, purgeFilesAfter, "inflightrepo")
+
+	_, err := os.Stat(buffer)
+	require.NoError(t, err, "actively written file must survive the purge")
+}
+
 func TestPurge(t *testing.T) {
 	purgeFilesAfter := 3600 * 24 * 30 // purge files if they are not accessed for 30 days
 

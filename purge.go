@@ -53,7 +53,11 @@ func purgeStaleFiles(cacheDir string, purgeFilesAfter int, repoName string) {
 		}
 		t := times.Get(info)
 		atime := t.AccessTime()
-		if atime.Before(removeIfOlder) {
+		// A file is stale only if it is neither read nor written: the
+		// buffer file of an in-flight download has no readers (stale
+		// atime) but is actively appended to (fresh mtime), and must not
+		// be deleted from under its Downloader.
+		if atime.Before(removeIfOlder) && info.ModTime().Before(removeIfOlder) {
 			log.Printf("Remove stale file %v as its access time (%v) is too old", path, atime)
 			if err := os.Remove(path); err != nil {
 				log.Print(err)
