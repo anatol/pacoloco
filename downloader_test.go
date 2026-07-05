@@ -475,6 +475,26 @@ func TestParseRequestURLInvalid(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestDownloadSizesUse64Bits pins the >2 GiB size arithmetic that used to
+// break on 32-bit platforms (linux/arm): sizes and offsets were plain int,
+// so a large package overflowed the reader offset and its Content-Length
+// did not survive parsing. The assertions are trivially true on 64-bit
+// builds; the 32-bit CI test legs are where they bite -- with the old int
+// fields this test does not even compile there (constant overflow).
+func TestDownloadSizesUse64Bits(t *testing.T) {
+	const huge = int64(3) << 30 // 3 GiB, above MaxInt32
+
+	d := &DownloadReader{downloader: &Downloader{contentLength: huge}}
+
+	pos, err := d.Seek(0, io.SeekEnd)
+	require.NoError(t, err)
+	require.Equal(t, huge, pos)
+
+	pos, err = d.Seek(huge+1, io.SeekStart)
+	require.NoError(t, err)
+	require.Equal(t, huge+1, pos)
+}
+
 func TestRequestedFile(t *testing.T) {
 	config = &Config{}
 

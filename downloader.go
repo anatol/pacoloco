@@ -35,7 +35,7 @@ type Downloader struct {
 
 	// downloaded metadata
 	modificationTime time.Time
-	contentLength    int
+	contentLength    int64
 
 	repoName string
 	repo     *Repo
@@ -54,7 +54,7 @@ type Downloader struct {
 	eventMetadataReceived bool
 	eventNotModified      bool
 	eventDone             bool
-	eventDataReceivedSize int
+	eventDataReceivedSize int64
 }
 
 func (d *Downloader) decrementUsage() {
@@ -182,7 +182,7 @@ func (d *Downloader) downloadFromUpstream(repoURL string, proxyURL *url.URL) err
 	}
 
 	if clStr := resp.Header.Get("Content-Length"); clStr != "" {
-		if cl, err := strconv.Atoi(clStr); err == nil {
+		if cl, err := strconv.ParseInt(clStr, 10, 64); err == nil {
 			d.contentLength = cl
 		}
 	}
@@ -235,7 +235,7 @@ func (d *Downloader) copyToBufferFile(in io.ReadCloser, keepalive func()) error 
 			keepalive()
 
 			d.eventCond.L.Lock()
-			d.eventDataReceivedSize += n
+			d.eventDataReceivedSize += int64(n)
 			d.eventCond.Broadcast()
 			d.eventCond.L.Unlock()
 		}
@@ -303,7 +303,7 @@ func getDownloadReader(f *RequestedFile) (time.Time, io.ReadSeekCloser, error) {
 
 type DownloadReader struct {
 	downloader *Downloader
-	offset     int
+	offset     int64
 }
 
 func (d *DownloadReader) Close() error {
@@ -325,8 +325,8 @@ func (d *DownloadReader) Read(p []byte) (int, error) {
 	dl.eventCond.L.Unlock()
 
 	if received > d.offset {
-		n, err := dl.bufferFile.ReadAt(p, int64(d.offset))
-		d.offset += n
+		n, err := dl.bufferFile.ReadAt(p, d.offset)
+		d.offset += int64(n)
 		if err == io.EOF {
 			// EOF on the bufferFile does not mean that we are done downloading
 			// EOF must be sent only once the download is complete
@@ -343,9 +343,9 @@ func (d *DownloadReader) Read(p []byte) (int, error) {
 func (d *DownloadReader) Seek(offset int64, whence int) (int64, error) {
 	switch whence {
 	case io.SeekStart:
-		d.offset = int(offset)
+		d.offset = offset
 	case io.SeekCurrent:
-		d.offset += int(offset)
+		d.offset += offset
 	case io.SeekEnd:
 		// note that we can call Seek method only after the metadata is received
 		d.offset = d.downloader.contentLength
@@ -353,7 +353,7 @@ func (d *DownloadReader) Seek(offset int64, whence int) (int64, error) {
 		return 0, fmt.Errorf("unknown whence parameter: %v", whence)
 	}
 
-	return int64(d.offset), nil
+	return d.offset, nil
 }
 
 // getDownloader returns a downloader that represents currently (and asynchronously) downloaded file
