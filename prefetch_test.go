@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"sync"
 	"testing"
 	"time"
 
@@ -41,6 +42,32 @@ repos:
 		t.Fatalf("parseConfig failed: %v", err)
 	}
 	return tmpDir
+}
+
+// TestConcurrentDBUpdatesNotLost exercises parallel client requests updating
+// the prefetch db, as happens when several machines upgrade at once. Without
+// a sqlite busy timeout concurrent writers fail immediately with "database
+// is locked" and their updates are silently dropped (updateDBRequestedFile
+// only logs db errors).
+func TestConcurrentDBUpdatesNotLost(t *testing.T) {
+	testSetupHelper(t)
+	setupPrefetch()
+
+	const writers = 40
+
+	var wg sync.WaitGroup
+	for i := range writers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			updateDBRequestedFile("example", fmt.Sprintf("pkg%d-1.0-1-x86_64.pkg.tar.zst", i))
+		}()
+	}
+	wg.Wait()
+
+	var count int64
+	require.NoError(t, prefetchDB.Model(&Package{}).Count(&count).Error)
+	require.EqualValues(t, writers, count, "concurrent db updates must not be lost")
 }
 
 func TestSetupPrefetch(t *testing.T) {
