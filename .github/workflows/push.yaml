@@ -328,6 +328,9 @@ jobs:
     if: github.event_name == 'push'
     needs:
       - build
+    # Digest of the published manifest list, reused by the release job.
+    outputs:
+      digest: ${{ steps.image.outputs.digest }}
     permissions:
       contents: read
       # Required to push the manifest list and provenance to GHCR.
@@ -407,3 +410,67 @@ jobs:
           subject-name: ${{ env.IMAGE_REF }}
           subject-digest: ${{ steps.image.outputs.digest }}
           push-to-registry: true
+
+  # Every master merge that published images becomes a release: bump the
+  # latest X.Y tag, point the new version tag at the manifest list that
+  # merge_and_publish just pushed (same digest, so its provenance still
+  # applies), then create the GitHub release. The tag is created with the
+  # workflow's own GITHUB_TOKEN, so it does not retrigger this workflow;
+  # manually pushed tags still take the tag leg above and skip this job.
+  release:
+    name: create release
+    runs-on: *runner-amd64
+    timeout-minutes: 10
+    # Only master matches the push branches filter, so ref_type is enough.
+    if: github.event_name == 'push' && github.ref_type == 'branch'
+    needs:
+      - merge_and_publish
+    permissions:
+      # Required to create the version tag and its GitHub release.
+      contents: write
+      # Required to add the version tag to the manifest list on GHCR.
+      packages: write
+    env:
+      DIGEST: ${{ needs.merge_and_publish.outputs.digest }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      # Spec requires ref to be lowercase, but user/org/repo names may have
+      # mixed case.
+      - name: Sanitize image ref
+        run: echo "IMAGE_REF=${REGISTRY}/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - name: Compute next version
+        run: |
+          latest=$(gh api "repos/${GITHUB_REPOSITORY}/tags" --paginate \
+            --jq '.[].name' | { grep -xE '[0-9]+\.[0-9]+' || true; } \
+            | sort -V | tail -n1)
+          if [[ -n "$latest" ]]; then
+            next="${latest%.*}.$(( ${latest##*.} + 1 ))"
+          else
+            # No X.Y tag yet (e.g. a fresh fork): start the scheme at 1.0.
+            next="1.0"
+          fi
+          echo "NEXT=${next}" >> "$GITHUB_ENV"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4.1.0
+
+      - name: Login to Container Registry
+        uses: docker/login-action@v4.2.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Retagging runs before the release is created: a cancelled run leaves
+      # at worst an image tag the next run overwrites, never a released
+      # version without an image.
+      - name: Tag image with version
+        run: >-
+          docker buildx imagetools create -t "${IMAGE_REF}:${NEXT}"
+          "${IMAGE_REF}@${DIGEST}"
+
+      - name: Create release
+        run: >-
+          gh release create "$NEXT" --repo "$GITHUB_REPOSITORY"
+          --target "$GITHUB_SHA" --generate-notes
