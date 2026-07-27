@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"net"
 	"net/http"
@@ -512,4 +513,114 @@ func TestRequestedFile(t *testing.T) {
 		require.Equal(t, d.urlPath, f.urlPath())
 		require.Equal(t, d.key, f.key())
 	}
+}
+
+// TestSignedDatabaseSignatureIsRefreshed is a regression test for repositories
+// that do sign their databases (CachyOS, Chaotic-AUR, ALHP, ...). Skipping the
+// .db.sig download outright pinned the cached signature forever while the .db
+// next to it kept being refreshed, so pacman eventually verified a new database
+// against an old signature and failed the sync with
+// "signature from ... is invalid".
+func TestSignedDatabaseSignatureIsRefreshed(t *testing.T) {
+	const staleSignature = "stale signature"
+	const freshSignature = "fresh signature"
+
+	var requested atomic.Int32
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		requested.Add(1)
+		w.Header().Set("Last-Modified", time.Now().UTC().Format(http.TimeFormat))
+		w.Header().Set("Content-Length", strconv.Itoa(len(freshSignature)))
+		_, _ = w.Write([]byte(freshSignature))
+	}
+	mirror := httptest.NewServer(http.HandlerFunc(handler))
+	defer mirror.Close()
+
+	testDir := t.TempDir()
+	config = &Config{
+		CacheDir:        testDir,
+		Port:            -1,
+		DownloadTimeout: 10,
+		Repos: map[string]*Repo{
+			"signed-repo": {URL: mirror.URL},
+		},
+	}
+
+	// An outdated signature is already cached, as it would be after the
+	// upstream published a new database.
+	cachePath := filepath.Join(testDir, "pkgs", "signed-repo")
+	require.NoError(t, os.MkdirAll(cachePath, os.ModePerm))
+	cachedSig := filepath.Join(cachePath, "test.db.sig")
+	require.NoError(t, os.WriteFile(cachedSig, []byte(staleSignature), os.ModePerm))
+	old := time.Now().Add(-24 * time.Hour)
+	require.NoError(t, os.Chtimes(cachedSig, old, old))
+
+	req := httptest.NewRequest(http.MethodGet, "/repo/signed-repo/test.db.sig", nil)
+	w := httptest.NewRecorder()
+	require.NoError(t, handleRequest(w, req))
+
+	require.Equal(t, int32(1), requested.Load(), "the signature must be re-checked upstream")
+	require.Equal(t, freshSignature, w.Body.String(), "the client must not receive the stale signature")
+
+	onDisk, err := os.ReadFile(cachedSig)
+	require.NoError(t, err)
+	require.Equal(t, freshSignature, string(onDisk), "the cached signature must be updated")
+}
+
+// TestMissingDatabaseSignatureIsQuiet covers the Arch Linux case that motivated
+// skipping signature downloads: its databases are unsigned, so mirrors answer
+// 404 for .db.sig. That is an expected answer and must not be reported as a
+// download failure.
+func TestMissingDatabaseSignatureIsQuiet(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}
+	mirror := httptest.NewServer(http.HandlerFunc(handler))
+	defer mirror.Close()
+
+	testDir := t.TempDir()
+	config = &Config{
+		CacheDir:        testDir,
+		Port:            -1,
+		DownloadTimeout: 10,
+		Repos: map[string]*Repo{
+			"unsigned-repo": {URL: mirror.URL},
+		},
+	}
+
+	var logs strings.Builder
+	previous := log.Writer()
+	log.SetOutput(&logs)
+	defer log.SetOutput(previous)
+
+	req := httptest.NewRequest(http.MethodGet, "/repo/unsigned-repo/core.db.sig", nil)
+	w := httptest.NewRecorder()
+	require.NoError(t, handleRequest(w, req))
+
+	require.Equal(t, http.StatusNotFound, w.Code, "an absent signature stays absent for the client")
+	require.NotContains(t, logs.String(), "unable to download file",
+		"a missing database signature must not be logged as a download failure")
+}
+
+// TestOtherDatabaseNotFoundStillFails pins that only .db.sig gets the quiet
+// treatment: a missing database itself is a real error worth reporting.
+func TestOtherDatabaseNotFoundStillFails(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}
+	mirror := httptest.NewServer(http.HandlerFunc(handler))
+	defer mirror.Close()
+
+	testDir := t.TempDir()
+	config = &Config{
+		CacheDir:        testDir,
+		Port:            -1,
+		DownloadTimeout: 10,
+		Repos: map[string]*Repo{
+			"missing-db-repo": {URL: mirror.URL},
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/repo/missing-db-repo/core.db", nil)
+	w := httptest.NewRecorder()
+	require.Error(t, handleRequest(w, req))
 }
