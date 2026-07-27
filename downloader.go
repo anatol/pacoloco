@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -27,6 +28,15 @@ var (
 // config.DownloadTimeout is unset (a variable only to allow shortening it
 // in tests).
 var downloadStallTimeout = time.Minute
+
+// errSignatureNotFound reports that an upstream has no signature for a
+// database file. Arch Linux does not sign its repository databases
+// (https://wiki.archlinux.org/title/DeveloperWiki:Repo_DB_Signing), so a
+// missing .db.sig is an expected answer there rather than a failure, and it
+// must not be logged as one. Repositories that do sign their databases
+// (CachyOS, Chaotic-AUR, ALHP, ...) answer with the signature and are
+// downloaded normally.
+var errSignatureNotFound = errors.New("database signature not found upstream")
 
 type Downloader struct {
 	key            string // repoName + path + filename
@@ -84,15 +94,15 @@ func (d *Downloader) download() error {
 		proxyURL, _ = url.Parse(d.repo.HttpProxy)
 	}
 
-	// Archlinux dbs are not signed as of Nov 2024
-	// https://wiki.archlinux.org/title/DeveloperWiki:Repo_DB_Signing
-	if strings.HasSuffix(d.urlPath, ".db.sig") {
-		return nil
-	}
-
 	for _, u := range urls {
 		err := d.downloadFromUpstream(u, proxyURL)
 		if err != nil {
+			if errors.Is(err, errSignatureNotFound) {
+				// The upstream does not publish a signature for this
+				// database. Other mirrors of the same repository will not
+				// either, so stop here and stay quiet.
+				return nil
+			}
 			log.Printf("unable to download file %v: %v", d.key, err)
 			continue // try next mirror
 		}
@@ -170,9 +180,15 @@ func (d *Downloader) downloadFromUpstream(repoURL string, proxyURL *url.URL) err
 		d.eventCond.L.Unlock()
 		// either pacoloco or client has the latest version, no need to redownload it
 		return nil
+	case http.StatusNotFound:
+		// Database signatures are optional: report a missing one as its own
+		// error so the caller can stay quiet instead of treating an unsigned
+		// repository as a broken mirror.
+		if strings.HasSuffix(d.urlPath, ".db.sig") {
+			return errSignatureNotFound
+		}
+		return fmt.Errorf("unable to download url %s, status code is %d", upstreamURL, resp.StatusCode)
 	default:
-		// for most dbs signatures are optional, be quiet if the signature is not found
-		// quiet := resp.StatusCode == http.StatusNotFound && strings.HasSuffix(url, ".db.sig")
 		return fmt.Errorf("unable to download url %s, status code is %d", upstreamURL, resp.StatusCode)
 	}
 
