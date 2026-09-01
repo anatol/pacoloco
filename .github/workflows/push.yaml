@@ -89,7 +89,7 @@ jobs:
         uses: docker/setup-qemu-action@v4.2.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4.2.0
+        uses: docker/setup-buildx-action@v4.3.0
 
       # Persist the Dockerfile's /root/.cache/go-build cache mount across CI
       # runs. PRs and manual runs restore but never save: restored caches are
@@ -208,7 +208,7 @@ jobs:
         run: echo "IMAGE_REF=${REGISTRY}/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4.2.0
+        uses: docker/setup-buildx-action@v4.3.0
 
       - name: Docker meta
         id: meta
@@ -350,7 +350,7 @@ jobs:
           path: ${{ env.DIGESTS_DIR }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4.2.0
+        uses: docker/setup-buildx-action@v4.3.0
 
       - name: Docker meta
         id: meta
