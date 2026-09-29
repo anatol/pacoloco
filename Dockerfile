@@ -32,7 +32,7 @@ ARG APP_USER=pacoloco
 ARG GOCACHE=/root/.cache/go-build
 
 # Toolchain pinned to the Go version required by go.mod.
-FROM golang:1.27-alpine3.23@sha256:3747dcba41c8b0db3211fda4db61638b980e17ac5bb3c94460a975a9cfe19395 AS common
+FROM golang:1.27-alpine3.23@sha256:0908ac9b9319e09d7c238aabe914e0395c51d63c4e3d0ae8c554fda9158a5769 AS common
 
 ARG GOCACHE
 # GOFLAGS applies to every go test/build/run below; GOCACHE pins the
@@ -71,7 +71,7 @@ FROM common AS build
 RUN --mount=type=cache,target=$GOCACHE \
     go build -ldflags="-s -w" -o pacoloco .
 
-FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS executable
+FROM alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS executable
 
 ARG APP_UID
 ARG APP_GID
