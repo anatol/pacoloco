@@ -153,6 +153,7 @@ prefetch: # optional section, add it if you want to enable prefetching
 ```
 
 * `cache_dir` is the cache directory, this location needs to read/writable by the server process.
+* `db_path` optionally overrides the location of the sqlite bookkeeping database (default is `<cache_dir>/sqlite-pkg-cache.db`); the parent directory must be readable and writable by the server process.
 * `purge_files_after` specifies inactivity duration (in seconds) after which the file should be removed from the cache. This functionality uses unix "AccessTime" field to find out inactive files. Default value is `0` that means never run the purging.
 * `address` is the servers listening address. When left empty, the server will start opening a listener on all available addresses. When any of the IPs is a public IP, it will make pacoloco available to the internet.
 * `port` is the server port.

@@ -47,6 +47,7 @@ repos:
 	require.NoError(t, err)
 	want := &Config{
 		CacheDir: `/tmp`,
+		DBPath:   path.Join(`/tmp`, DefaultDBName),
 		Port:     9139,
 		Repos: map[string]*Repo{
 			"archlinux": {
@@ -72,6 +73,7 @@ repos:
 	require.NoError(t, err)
 	want := &Config{
 		CacheDir: `/tmp`,
+		DBPath:   path.Join(`/tmp`, DefaultDBName),
 		Port:     9129,
 		Repos: map[string]*Repo{
 			"archlinux": {
@@ -97,6 +99,7 @@ repos:
 	require.NoError(t, err)
 	want := &Config{
 		CacheDir: `/tmp`,
+		DBPath:   path.Join(`/tmp`, DefaultDBName),
 		Port:     9129,
 		Repos: map[string]*Repo{
 			"archlinux": {
@@ -134,6 +137,7 @@ repos:
 	require.NoError(t, err)
 	want := &Config{
 		CacheDir: temp,
+		DBPath:   path.Join(temp, DefaultDBName),
 		Port:     9139,
 		Repos: map[string]*Repo{
 			"archlinux": {
@@ -160,6 +164,7 @@ repos:
 	require.NoError(t, err)
 	want := &Config{
 		CacheDir: "/tmp",
+		DBPath:   path.Join("/tmp", DefaultDBName),
 		Port:     DefaultPort,
 		Repos: map[string]*Repo{
 			"archlinux": {
@@ -187,6 +192,7 @@ repos:
 	require.NoError(t, err)
 	want := &Config{
 		CacheDir: `/tmp`,
+		DBPath:   path.Join(`/tmp`, DefaultDBName),
 		Port:     9139,
 		Repos: map[string]*Repo{
 			"archlinux": {
@@ -343,4 +349,31 @@ repos:
 `))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "tls key file")
+}
+
+// test that `db_path` is being read correctly
+func TestLoadConfigWithDBPath(t *testing.T) {
+	temp := t.TempDir()
+	got, err := parseConfig([]byte(`
+cache_dir: /tmp
+db_path: ` + temp + `/sqlite-pkg-cache.db
+repos:
+  archlinux:
+    url: http://mirrors.kernel.org/archlinux
+`))
+	require.NoError(t, err)
+	require.Equal(t, path.Join(temp, "sqlite-pkg-cache.db"), got.DBPath)
+}
+
+// test that an unreachable `db_path` parent directory is rejected
+func TestParseConfigInvalidDBPath(t *testing.T) {
+	_, err := parseConfig([]byte(`
+cache_dir: /tmp
+db_path: /nonexistent/path/that/does/not/exist/sqlite-pkg-cache.db
+repos:
+  archlinux:
+    url: http://mirrors.kernel.org/archlinux
+`))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "does not exist or isn't writable")
 }

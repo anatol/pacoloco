@@ -204,3 +204,19 @@ func TestGetPackageFromFilenameAndRepo(t *testing.T) {
 	require.True(t, cmp.Equal(got, want, cmpopts.IgnoreFields(Package{}, "LastTimeDownloaded", "LastTimeRepoUpdated")))
 	// require.Equal(t, want, got)
 }
+
+// test that `createPrefetchDB()` honors the `db_path` config option
+func TestCreatePrefetchDBWithDBPath(t *testing.T) {
+	testSetupHelper(t)
+	dbDir := t.TempDir()
+	config.DBPath = path.Join(dbDir, DefaultDBName)
+	defer func() { config.DBPath = "" }()
+
+	createPrefetchDB()
+	exists, err := fileExists(path.Join(dbDir, DefaultDBName))
+	require.NoError(t, err)
+	require.Truef(t, exists, "createPrefetchDB didn't create the db file at the db_path location")
+	exists, err = fileExists(path.Join(config.CacheDir, DefaultDBName))
+	require.NoError(t, err)
+	require.Falsef(t, exists, "createPrefetchDB must not create the db in cache_dir when db_path is set")
+}

@@ -15,6 +15,7 @@ $ pacoloco --config /some/location/config.yaml
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `cache_dir` | string | `/var/cache/pacoloco` | Cache directory path. Must be readable and writable. |
+| `db_path` | string | `<cache_dir>/sqlite-pkg-cache.db` | SQLite bookkeeping database file path. Parent directory must be readable and writable. |
 | `address` | string | `""` (all interfaces) | Server listen address. |
 | `port` | int | `9129` | Server listen port. |
 | `purge_files_after` | int | `0` (disabled) | Seconds of inactivity before purging cached files. Minimum 600 (10 minutes) if enabled. |
