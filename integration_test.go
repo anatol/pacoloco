@@ -47,6 +47,9 @@ func TestPacolocoIntegrationWithPrefetching(t *testing.T) {
 		Repos:           make(map[string]*Repo),
 		Prefetch:        &RefreshPeriod{Cron: "0 0 " + fmt.Sprint(notInvokingPrefetchTime.Hour()) + " ? * 1#1 *"},
 	}
+	// parseConfig derives the db path for its own configs; this config is
+	// hand-built, so set the same default location natively.
+	config.DBPath = path.Join(testPacolocoDir, DefaultDBName)
 	setupPrefetch()
 	pacoloco := httptest.NewServer(http.HandlerFunc(pacolocoHandler))
 	defer pacoloco.Close()

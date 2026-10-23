@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -42,6 +43,7 @@ type Tls struct {
 
 type Config struct {
 	CacheDir        string           `yaml:"cache_dir"`
+	DBPath          string           `yaml:"db_path"`
 	Address         string           `yaml:"address"`
 	Port            int              `yaml:"port"`
 	Repos           map[string]*Repo `yaml:"repos,omitempty"`
@@ -92,6 +94,13 @@ func parseConfig(raw []byte) (*Config, error) {
 
 	if unix.Access(result.CacheDir, unix.R_OK|unix.W_OK) != nil {
 		return nil, fmt.Errorf("directory %v does not exist or isn't writable for userid %v", result.CacheDir, os.Getuid())
+	}
+
+	if result.DBPath != "" && unix.Access(filepath.Dir(result.DBPath), unix.R_OK|unix.W_OK) != nil {
+		return nil, fmt.Errorf("db_path directory %v does not exist or isn't writable for userid %v", filepath.Dir(result.DBPath), os.Getuid())
+	}
+	if result.DBPath == "" {
+		result.DBPath = filepath.Join(result.CacheDir, DefaultDBName)
 	}
 	// validate Prefetch config
 

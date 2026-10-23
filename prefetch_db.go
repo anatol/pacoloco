@@ -70,7 +70,7 @@ func createPrefetchDB() {
 	if config == nil {
 		log.Fatalf("Config have not been parsed yet")
 	}
-	dbPath := filepath.Join(config.CacheDir, DefaultDBName)
+	dbPath := config.DBPath
 	if _, err := os.Stat(dbPath); err == nil {
 		return // DB already exists
 	}
@@ -88,7 +88,7 @@ func getDBConnection() (*gorm.DB, error) {
 	if config == nil {
 		return nil, fmt.Errorf("config have not been parsed yet")
 	}
-	dbPath := filepath.Join(config.CacheDir, DefaultDBName)
+	dbPath := config.DBPath
 	logFlags := 0
 	if config.LogTimestamp {
 		logFlags = log.LstdFlags
