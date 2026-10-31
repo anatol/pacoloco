@@ -339,6 +339,7 @@ func (d *DownloadReader) Read(p []byte) (int, error) {
 	}
 	received := dl.eventDataReceivedSize
 	done := dl.eventDone
+	doneErr := dl.eventError
 	dl.eventCond.L.Unlock()
 
 	if received > d.offset {
@@ -350,6 +351,8 @@ func (d *DownloadReader) Read(p []byte) (int, error) {
 			err = nil
 		}
 		return n, err
+	} else if done && doneErr != nil {
+		return 0, doneErr // the download failed, the data read so far is incomplete
 	} else if done {
 		return 0, io.EOF
 	}
