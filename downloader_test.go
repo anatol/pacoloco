@@ -624,3 +624,45 @@ func TestOtherDatabaseNotFoundStillFails(t *testing.T) {
 	w := httptest.NewRecorder()
 	require.Error(t, handleRequest(w, req))
 }
+
+// TestDownloadWithoutContentLength is a regression test for #174: a file without Content-Length
+// upstream must be streamed instead of served as an empty 200, and an upstream failure must show.
+func TestDownloadWithoutContentLength(t *testing.T) {
+	first := strings.Repeat("a", 64*1024) // larger than net/http's response buffers
+	release := make(chan struct{})
+	unblock := sync.OnceFunc(func() { close(release) })
+	mirror := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Last-Modified", "Sat, 31 Oct 2026 12:00:00 GMT")
+		w.Write([]byte(first))
+		w.(http.Flusher).Flush() // headers go out without Content-Length
+		if strings.HasSuffix(r.URL.Path, "/broken.pkg.tar.zst") {
+			panic(http.ErrAbortHandler) // drop the connection mid-body
+		}
+		<-release
+		w.Write([]byte("rest"))
+	}))
+	defer mirror.Close()
+	defer unblock() // runs first, so a failing test does not hang in mirror.Close
+
+	config = &Config{CacheDir: t.TempDir(), DownloadTimeout: 10, Repos: map[string]*Repo{"up": {URL: mirror.URL}}}
+	pacoloco := httptest.NewServer(http.HandlerFunc(pacolocoHandler))
+	defer pacoloco.Close()
+
+	resp, err := http.Get(pacoloco.URL + "/repo/up/test-1-1-any.pkg.tar.zst")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, "Sat, 31 Oct 2026 12:00:00 GMT", resp.Header.Get("Last-Modified"))
+	head := make([]byte, len(first)/2) // arrives while the upstream download is still running
+	_, err = io.ReadFull(resp.Body, head)
+	require.NoError(t, err)
+	unblock()
+	rest, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, first+"rest", string(head)+string(rest))
+
+	resp, err = http.Get(pacoloco.URL + "/repo/up/broken.pkg.tar.zst")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	_, err = io.ReadAll(resp.Body)
+	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
+}

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -242,9 +243,20 @@ func handleRequest(w http.ResponseWriter, req *http.Request) error {
 		http.ServeFile(w, req, f.cachedFilePath)
 		cacheServedCounter.WithLabelValues(f.repoName).Inc()
 	} else {
-		http.ServeContent(w, req, f.fileName, modTime, r)
 		cacheMissedCounter.WithLabelValues(f.repoName).Inc()
-		// ServeContent has already written the response; returning an
+		// ServeContent needs the size up front; without Content-Length from upstream, stream the file (#174)
+		if r.(*DownloadReader).downloader.contentLength > 0 || req.Method == http.MethodHead {
+			http.ServeContent(w, req, f.fileName, modTime, r)
+		} else {
+			if !modTime.IsZero() {
+				w.Header().Set("Last-Modified", modTime.UTC().Format(http.TimeFormat)) // pacman dates its db with it
+			}
+			if _, err := io.Copy(w, r); err != nil {
+				r.Close()
+				panic(http.ErrAbortHandler) // a truncated stream must not end like a complete one
+			}
+		}
+		// The response has already been written; returning an
 		// error here would only produce a superfluous WriteHeader call.
 		if err := r.Close(); err != nil {
 			log.Printf("error closing download reader for %v: %v", f.key(), err)
