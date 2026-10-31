@@ -643,8 +643,13 @@ func TestDownloadWithoutContentLength(t *testing.T) {
 	}))
 	defer mirror.Close()
 	defer unblock() // runs first, so a failing test does not hang in mirror.Close
+	next := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("complete file"))
+		w.(http.Flusher).Flush() // no Content-Length, so only the fix keeps it from being appended to broken.pkg
+	}))
+	defer next.Close()
 
-	config = &Config{CacheDir: t.TempDir(), DownloadTimeout: 10, Repos: map[string]*Repo{"up": {URL: mirror.URL}}}
+	config = &Config{CacheDir: t.TempDir(), DownloadTimeout: 10, Repos: map[string]*Repo{"up": {URLs: []string{mirror.URL, next.URL}}}}
 	pacoloco := httptest.NewServer(http.HandlerFunc(pacolocoHandler))
 	defer pacoloco.Close()
 
