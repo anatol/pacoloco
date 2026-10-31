@@ -104,6 +104,9 @@ func (d *Downloader) download() error {
 				return nil
 			}
 			log.Printf("unable to download file %v: %v", d.key, err)
+			if d.eventDataReceivedSize > 0 {
+				return err // the next mirror would append its file to the partial one
+			}
 			continue // try next mirror
 		}
 		return nil
