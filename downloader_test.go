@@ -218,9 +218,7 @@ func TestConcurrentForceCheckRequests(t *testing.T) {
 	errCh := make(chan error, clients)
 	var wg sync.WaitGroup
 	for range clients {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range requestsPerClient {
 				req := httptest.NewRequest(http.MethodGet, "/repo/race-repo/test.db", nil)
 				w := httptest.NewRecorder()
@@ -233,7 +231,7 @@ func TestConcurrentForceCheckRequests(t *testing.T) {
 					return
 				}
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	close(errCh)
@@ -276,9 +274,7 @@ func TestConcurrentDownloadsShareUpstreamRequest(t *testing.T) {
 	errCh := make(chan error, clients)
 	var wg sync.WaitGroup
 	for range clients {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			req := httptest.NewRequest(http.MethodGet, "/repo/flight-repo/pkg-1-1-any.pkg.tar.zst", nil)
 			w := httptest.NewRecorder()
 			if err := handleRequest(w, req); err != nil {
@@ -288,7 +284,7 @@ func TestConcurrentDownloadsShareUpstreamRequest(t *testing.T) {
 			if body := w.Body.String(); body != content {
 				errCh <- fmt.Errorf("got %d bytes, want %d", len(body), len(content))
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	close(errCh)

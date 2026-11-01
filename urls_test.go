@@ -129,13 +129,11 @@ func TestGetMirrorlistURLsConcurrent(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for range 32 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range 100 {
 				repo.getUrls()
 			}
-		}()
+		})
 	}
 	wg.Wait()
 

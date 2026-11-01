@@ -57,11 +57,9 @@ func TestConcurrentDBUpdatesNotLost(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for i := range writers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			updateDBRequestedFile("example", fmt.Sprintf("pkg%d-1.0-1-x86_64.pkg.tar.zst", i))
-		}()
+		})
 	}
 	wg.Wait()
 
