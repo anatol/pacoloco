@@ -6,11 +6,11 @@ require (
 	github.com/djherbis/times v1.6.0
 	github.com/google/go-cmp v0.7.0
 	github.com/gorhill/cronexpr v0.0.0-20180427100037-88b0669f7d75
-	github.com/klauspost/compress v1.20.3
+	github.com/klauspost/compress v1.20.4
 	github.com/prometheus/client_golang v1.25.0
 	github.com/stretchr/testify v1.12.1
 	github.com/ulikunitz/xz v0.5.17
-	golang.org/x/sys v0.49.0
+	golang.org/x/sys v0.50.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.2
